@@ -69,7 +69,7 @@ def train_toy(toy, load=True, nb_steps=20, nb_flow=1, folder=""):
             A = model.dag_embedding.dag.A.detach().numpy().T
             ax = plt.subplot(1, 3, 3)
             G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-            pos = nx.layout.spectral_layout(G)
+            pos = nx.layout.fruchterman_reingold_layout(G)
             nodes = nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
             edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
             edges = nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
