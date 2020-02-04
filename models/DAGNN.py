@@ -8,6 +8,7 @@ class DAGNN(nn.Module):
     def __init__(self, d, device="cpu"):
         super().__init__()
         self.A = nn.Parameter(torch.randn(d, d)*.1 + .5)
+        self.A.to(device)
         self.d = d
         self.device = device
 
@@ -50,9 +51,13 @@ class DAGEmbedding(nn.Module):
         self.m_embeding = None
         self.device = device
         self.in_d = in_d
-        self.dag = DAGNN(in_d).to(device)
+        self.dag = DAGNN(in_d, device=device)
         self.parallel_nets = IntegrandNetwork(in_d, 1 + in_d + in_d, hiddens_integrand, 1, act_func=act_func,
                                               device=device)
+
+    def to(self, device):
+        self.dag.to(device)
+        self.parallel_nets.to(device)
 
     def make_embeding(self, x_made, context=None):
         b_size = x_made.shape[0]

@@ -19,8 +19,8 @@ def train_toy(toy, load=True, nb_steps=20, nb_flow=1, folder=""):
 
     #model = UMNNMAFFlow(nb_flow=nb_flow, nb_in=4, hidden_derivative=[100, 100, 100], hidden_embedding=[50, 50, 50],
     #                    embedding_s=10, nb_steps=nb_steps, device=device).to(device)
-    dim = 4
-    model = DAGNF(in_d=dim, hiddens_integrand=[200, 200, 200, 200]).to(device)
+    dim = 8
+    model = DAGNF(in_d=dim, hiddens_integrand=[200, 200, 200, 200], device=device)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
 
@@ -88,7 +88,7 @@ def train_toy(toy, load=True, nb_steps=20, nb_flow=1, folder=""):
             plt.clf()
             print(model.dag_embedding.dag.A)
 
-toy = "2spirals-8gaussians"
+toy = "4-2spirals-8gaussians"
 if not(os.path.isdir(toy)):
     os.makedirs(toy)
 train_toy(toy)
