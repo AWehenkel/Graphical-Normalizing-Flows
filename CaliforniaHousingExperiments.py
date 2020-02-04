@@ -8,10 +8,13 @@ import lib.visualize_flow as vf
 import matplotlib.pyplot as plt
 from UMNN import UMNNMAFFlow
 import networkx as nx
+import sklearn.datasets as datasets
+import numpy as np
 
 
-def train_toy(toy, load=True, nb_steps=20, nb_flow=1, folder=""):
-    logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
+def train(load=True, nb_steps=20, nb_flow=1, folder=""):
+    dir = "California-Housing"
+    logger = utils.get_logger(logpath=os.path.join(folder, dir, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
 
@@ -26,22 +29,25 @@ def train_toy(toy, load=True, nb_steps=20, nb_flow=1, folder=""):
 
     if load:
         logger.info("Loading model...")
-        model.load_state_dict(torch.load(toy + '/model.pt'))
+        model.load_state_dict(torch.load(dir + '/model.pt'))
         model.train()
-        opt.load_state_dict(torch.load(toy + '/ADAM.pt'))
+        opt.load_state_dict(torch.load(dir + '/ADAM.pt'))
         logger.info("Model loaded.")
 
     nb_samp = 100
     batch_size = 100
 
-    x_test = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
-    x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
+    all_data = datasets.fetch_california_housing(data_home=None, download_if_missing=True, return_X_y=False)
+    X = np.append([all_data['data'], all_data['target']])
+
+    x_test = torch.tensor(toy_data.inf_train_gen(dir, batch_size=1000)).to(device)
+    x = torch.tensor(toy_data.inf_train_gen(dir, batch_size=1000)).to(device)
 
     for epoch in range(10000):
         ll_tot = 0
         start = timer()
         for j in range(0, nb_samp, batch_size):
-            cur_x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=batch_size)).to(device)
+            cur_x = torch.tensor(toy_data.inf_train_gen(dir, batch_size=batch_size)).to(device)
             print(cur_x.shape)
             #ll, _ = model.compute_ll(cur_x)
             #loss = -ll.mean()#
@@ -88,14 +94,14 @@ def train_toy(toy, load=True, nb_steps=20, nb_flow=1, folder=""):
             nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
             #vf.plt_flow(model.compute_ll, ax)
-            plt.savefig("%s/flow_%d.pdf" % (toy, epoch))
-            torch.save(model.state_dict(), toy + '/model.pt')
-            torch.save(opt.state_dict(), toy + '/ADAM.pt')
+            plt.savefig("%s/flow_%d.pdf" % (dir, epoch))
+            torch.save(model.state_dict(), dir + '/model.pt')
+            torch.save(opt.state_dict(), dir + '/ADAM.pt')
             G.clear()
             plt.clf()
             print(model.dag_embedding.dag.A)
 
-toy = "4-2spirals-8gaussians"
-if not(os.path.isdir(toy)):
-    os.makedirs(toy)
-train_toy(toy)
+dir = "4-2spirals-8gaussians"
+if not(os.path.isdir(dir)):
+    os.makedirs(dir)
+train_toy(dir)

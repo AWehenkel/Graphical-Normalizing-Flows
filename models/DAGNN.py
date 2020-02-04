@@ -102,7 +102,7 @@ class DAGNF(nn.Module):
         ll, _ = self.UMNN.compute_ll(x)
         lag_const = self.dag_embedding.dag.get_power_trace(self.c/self.d)
         print(lag_const.item())
-        loss = self.lambd*lag_const + self.c/2*lag_const**2 - ll.mean() + .05*self.dag_embedding.dag.A.abs().sum()
+        loss = self.lambd*lag_const + self.c/2*lag_const**2 - ll.mean() + .5*self.dag_embedding.dag.A.abs().sum()
         return loss
 
     def update_dual_param(self):
