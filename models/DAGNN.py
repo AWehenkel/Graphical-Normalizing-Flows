@@ -15,6 +15,7 @@ class DAGNN(nn.Module):
     def to(self, device):
         self.A.to(device)
         self.device = device
+        return self
 
     def forward(self, x):
         return (x.unsqueeze(1).expand(-1, self.d, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))\
@@ -58,6 +59,7 @@ class DAGEmbedding(nn.Module):
     def to(self, device):
         self.dag.to(device)
         self.parallel_nets.to(device)
+        return self
 
     def make_embeding(self, x_made, context=None):
         b_size = x_made.shape[0]
@@ -88,6 +90,7 @@ class DAGNF(nn.Module):
         self.dag_embedding.to(device)
         self.UMNN.to(device)
         self.prev_trace.to(device)
+        return self
 
     def forward(self, x):
         return self.UMNN(x)
