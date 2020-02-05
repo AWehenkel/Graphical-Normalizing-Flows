@@ -8,12 +8,13 @@ import lib.visualize_flow as vf
 import matplotlib.pyplot as plt
 from UMNN import UMNNMAFFlow
 import networkx as nx
-import sklearn.datasets as datasets
-import numpy as np
+from Datasets import CaliforniaHousingDataset
 
 
-def train(load=True, nb_steps=20, nb_flow=1, folder=""):
+def train(load=False, nb_steps=20, nb_flow=1, folder=""):
     dir = "California-Housing"
+    if not (os.path.isdir(dir)):
+        os.makedirs(dir)
     logger = utils.get_logger(logpath=os.path.join(folder, dir, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -22,7 +23,20 @@ def train(load=True, nb_steps=20, nb_flow=1, folder=""):
 
     #model = UMNNMAFFlow(nb_flow=nb_flow, nb_in=4, hidden_derivative=[100, 100, 100], hidden_embedding=[50, 50, 50],
     #                    embedding_s=10, nb_steps=nb_steps, device=device).to(device)
-    dim = 8
+
+    batch_size = 100
+    n_worker = 1
+    shuffle = True
+
+    d_train = CaliforniaHousingDataset("train")
+    d_test = CaliforniaHousingDataset("test", normalize=False).normalize(d_train.mu, d_train.std)
+    d_valid = CaliforniaHousingDataset("valid", normalize=False).normalize(d_train.mu, d_train.std)
+
+    dl_train = torch.utils.data.DataLoader(dataset=d_train, batch_size=batch_size, num_workers=n_worker, shuffle=shuffle)
+    dl_test = torch.utils.data.DataLoader(dataset=d_test, batch_size=batch_size, num_workers=n_worker, shuffle=shuffle)
+    dl_valid = torch.utils.data.DataLoader(dataset=d_valid, batch_size=batch_size, num_workers=n_worker, shuffle=shuffle)
+
+    dim = d_train[0].shape[0]
     model = DAGNF(in_d=dim, hiddens_integrand=[200, 200, 200, 200], device=device)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
@@ -34,25 +48,15 @@ def train(load=True, nb_steps=20, nb_flow=1, folder=""):
         opt.load_state_dict(torch.load(dir + '/ADAM.pt'))
         logger.info("Model loaded.")
 
-    nb_samp = 100
-    batch_size = 100
-
-    all_data = datasets.fetch_california_housing(data_home=None, download_if_missing=True, return_X_y=False)
-    X = np.append([all_data['data'], all_data['target']])
-
-    x_test = torch.tensor(toy_data.inf_train_gen(dir, batch_size=1000)).to(device)
-    x = torch.tensor(toy_data.inf_train_gen(dir, batch_size=1000)).to(device)
-
     for epoch in range(10000):
         ll_tot = 0
+        i = 0
         start = timer()
-        for j in range(0, nb_samp, batch_size):
-            cur_x = torch.tensor(toy_data.inf_train_gen(dir, batch_size=batch_size)).to(device)
-            print(cur_x.shape)
-            #ll, _ = model.compute_ll(cur_x)
-            #loss = -ll.mean()#
+        for _, X in enumerate(dl_train):
+            cur_x = torch.tensor(X, device=device, dtype=torch.float)
             loss = model.loss(cur_x)
             ll_tot += loss.item()
+            i += 1
             opt.zero_grad()
             loss.backward(retain_graph=True)
             opt.step()
@@ -60,27 +64,27 @@ def train(load=True, nb_steps=20, nb_flow=1, folder=""):
             with torch.no_grad():
                 model.dag_embedding.dag.constrainA()
 
-        if epoch % 50 == 0 and epoch != 0:
+        if epoch % 1 == 0 and epoch != 0:
             model.update_dual_param()
 
+        ll_tot /= i
         end = timer()
-        ll_test, _ = model.compute_ll(x_test)
-        ll_test = -ll_test.mean()
+        with torch.no_grad():
+            ll_test = 0.
+            i = 0
+            for _, X in enumerate(dl_test):
+                cur_x = torch.tensor(X, device=device, dtype=torch.float)
+                loss = model.loss(cur_x)
+                ll_test += loss.item()
+                i += 1
+        ll_test /= i
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
-                    format(epoch, ll_tot, ll_test.item(), end-start))
-        if epoch % 100 == 0:
-            def compute_ll_2spirals(x):
-                return model.compute_ll(torch.cat((x, torch.zeros(x.shape[0], dim-2)), 1))
-            def compute_ll_8gaussians(x):
-                return model.compute_ll(torch.cat((torch.zeros(x.shape[0], dim-2), x), 1))
-            ax = plt.subplot(1, 3, 1, aspect="equal")
-            vf.plt_flow(compute_ll_2spirals, ax)
-            ax = plt.subplot(1, 3, 2, aspect="equal")
-            vf.plt_flow(compute_ll_8gaussians, ax)
+                    format(epoch, ll_tot, ll_test, end-start))
+        if epoch % 5 == 0:
 
             # Plot DAG
+            plt.figure()
             A = model.dag_embedding.dag.A.detach().numpy().T
-            ax = plt.subplot(1, 3, 3)
             G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
             pos = nx.layout.fruchterman_reingold_layout(G)
             nodes = nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
@@ -101,7 +105,5 @@ def train(load=True, nb_steps=20, nb_flow=1, folder=""):
             plt.clf()
             print(model.dag_embedding.dag.A)
 
-dir = "4-2spirals-8gaussians"
-if not(os.path.isdir(dir)):
-    os.makedirs(dir)
-train_toy(dir)
+
+train()
