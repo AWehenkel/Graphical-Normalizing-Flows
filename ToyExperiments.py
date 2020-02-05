@@ -70,9 +70,9 @@ def train_toy(toy, load=True, nb_steps=20, folder=""):
                     return model.compute_ll(torch.cat((torch.zeros(x.shape[0], dim-2).to(device), x), 1))
                 with torch.no_grad():
                     ax = plt.subplot(1, 3, 1, aspect="equal")
-                    vf.plt_flow(compute_ll_2spirals, ax)
+                    vf.plt_flow(compute_ll_2spirals, ax, device=device)
                     ax = plt.subplot(1, 3, 2, aspect="equal")
-                    vf.plt_flow(compute_ll_8gaussians, ax)
+                    vf.plt_flow(compute_ll_8gaussians, ax, device=device)
 
             # Plot DAG
             A = model.dag_embedding.dag.soft_thresholded_A().detach().numpy().T
