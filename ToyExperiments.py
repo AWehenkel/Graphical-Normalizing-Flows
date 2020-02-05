@@ -63,16 +63,17 @@ def train_toy(toy, load=True, nb_steps=20, folder=""):
         if epoch % 100 == 0:
             if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians"]:
                 def compute_ll_2spirals(x):
-                    return model.compute_ll(torch.cat((x, torch.zeros(x.shape[0], dim-2).to(device)), 1)).detach().cpu()
+                    return model.compute_ll(torch.cat((x, torch.zeros(x.shape[0], dim-2).to(device)), 1))
                 def compute_ll_8gaussians(x):
-                    return model.compute_ll(torch.cat((torch.zeros(x.shape[0], dim-2).to(device), x), 1)).detach().cpu()
-                ax = plt.subplot(1, 3, 1, aspect="equal")
-                vf.plt_flow(compute_ll_2spirals, ax)
-                ax = plt.subplot(1, 3, 2, aspect="equal")
-                vf.plt_flow(compute_ll_8gaussians, ax)
+                    return model.compute_ll(torch.cat((torch.zeros(x.shape[0], dim-2).to(device), x), 1))
+                with torch.no_grad():
+                    ax = plt.subplot(1, 3, 1, aspect="equal")
+                    vf.plt_flow(compute_ll_2spirals, ax)
+                    ax = plt.subplot(1, 3, 2, aspect="equal")
+                    vf.plt_flow(compute_ll_8gaussians, ax)
 
             # Plot DAG
-            A = model.dag_embedding.dag.A.detach().numpy().T
+            A = model.dag_embedding.dag.soft_thresholded_A().detach().numpy().T
             ax = plt.subplot(1, 3, 3)
             G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
             pos = nx.layout.fruchterman_reingold_layout(G)
@@ -92,7 +93,7 @@ def train_toy(toy, load=True, nb_steps=20, folder=""):
             torch.save(opt.state_dict(), folder + toy + '/ADAM.pt')
             G.clear()
             plt.clf()
-            print(model.dag_embedding.dag.A)
+            print(A)
 
 toy = "4-2spirals-8gaussians"
 
