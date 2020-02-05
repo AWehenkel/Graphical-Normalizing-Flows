@@ -18,7 +18,7 @@ class DAGNN(nn.Module):
         return self
 
     def soft_thresholded_A(self):
-        return 2*(torch.sigmoid(3*(self.A**2)) -.5)
+        return 2*(torch.sigmoid(2*(self.A**2)) -.5)
 
     def forward(self, x):
         if self.s_thresh:
@@ -80,7 +80,7 @@ class DAGEmbedding(nn.Module):
 
 class DAGNF(nn.Module):
     def __init__(self, in_d, hiddens_integrand=[50, 50, 50], out_made=1, act_func='ELU',
-                 nb_steps=20, solver="CCParallel", device="cpu"):
+                 nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1.):
         super().__init__()
         self.dag_embedding = DAGEmbedding(in_d, hiddens_integrand, out_made, act_func, device)
         self.UMNN = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, device=device, solver=solver)
@@ -91,7 +91,7 @@ class DAGNF(nn.Module):
         self.d = in_d
         self.prev_trace = self.dag_embedding.dag.get_power_trace(self.c / self.d)
         self.tol = 1e-4
-        self.l1_weight = .1
+        self.l1_weight = l1_weight
 
     def to(self, device):
         self.dag_embedding.to(device)
@@ -106,8 +106,6 @@ class DAGNF(nn.Module):
         return self.UMNN.compute_ll(x)
 
     def loss(self, x):
-        print(x.is_cuda)
-        print(self.UMNN.device)
         ll, _ = self.UMNN.compute_ll(x)
         lag_const = self.dag_embedding.dag.get_power_trace(self.c/self.d)
         print(lag_const.item())
@@ -117,7 +115,6 @@ class DAGNF(nn.Module):
     def update_dual_param(self):
         with torch.no_grad():
             lag_const = self.dag_embedding.dag.get_power_trace(self.c / self.d)
-            print(lag_const)
             if lag_const > self.tol:
                 self.lambd = self.lambd + self.c * lag_const
                 # Absolute does not make sense (but copied from DAG-GNN)

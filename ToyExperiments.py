@@ -24,7 +24,7 @@ def train_toy(toy, load=True, nb_steps=20, folder=""):
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    model = DAGNF(in_d=dim, hiddens_integrand=[200, 200, 200, 200], device=device)
+    model = DAGNF(in_d=dim, hiddens_integrand=[200, 200, 200, 200], device=device, l1_weight=.05)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
 
@@ -52,8 +52,10 @@ def train_toy(toy, load=True, nb_steps=20, folder=""):
             with torch.no_grad():
                 model.dag_embedding.dag.constrainA()
 
-        if epoch % 50 == 0 and epoch != 0:
+        if epoch % 100 == 0 and epoch != 0:
             model.update_dual_param()
+            if model.l1_weight < 1.:
+                model.l1_weight = model.l1_weight*1.4
 
         end = timer()
         ll_test, _ = model.compute_ll(x_test)
@@ -81,7 +83,7 @@ def train_toy(toy, load=True, nb_steps=20, folder=""):
             edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
             edges = nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
                                            arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                           edge_cmap=plt.cm.Blues, width=weights)
+                                           edge_cmap=plt.cm.Blues, width=5*weights)
             labels = {}
             for i in range(dim):
                 labels[i] = str(r'$%d$' % i)
