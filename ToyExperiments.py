@@ -75,7 +75,7 @@ def train_toy(toy, load=True, nb_steps=20, folder=""):
                     vf.plt_flow(compute_ll_8gaussians, ax, device=device)
 
             # Plot DAG
-            A = model.dag_embedding.dag.soft_thresholded_A().detach().numpy().T
+            A = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
             ax = plt.subplot(1, 3, 3)
             G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
             pos = nx.layout.fruchterman_reingold_layout(G)
