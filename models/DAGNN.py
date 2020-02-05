@@ -7,13 +7,12 @@ from UMNN import IntegrandNetwork, UMNNMAF
 class DAGNN(nn.Module):
     def __init__(self, d, device="cpu"):
         super().__init__()
-        self.A = nn.Parameter(torch.randn(d, d)*.1 + .5)
-        self.A.to(device)
+        self.A = nn.Parameter(torch.randn(d, d, device=device)*.1 + .5)
         self.d = d
         self.device = device
 
     def to(self, device):
-        self.A.to(device)
+        self.A = self.A.to(device)
         self.device = device
         return self
 
