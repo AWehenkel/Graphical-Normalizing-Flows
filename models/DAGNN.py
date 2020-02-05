@@ -85,6 +85,7 @@ class DAGNF(nn.Module):
         self.d = in_d
         self.prev_trace = self.dag_embedding.dag.get_power_trace(self.c / self.d)
         self.tol = 1e-4
+        self.l1_weight = .1
 
     def to(self, device):
         self.dag_embedding.to(device)
@@ -102,7 +103,7 @@ class DAGNF(nn.Module):
         ll, _ = self.UMNN.compute_ll(x)
         lag_const = self.dag_embedding.dag.get_power_trace(self.c/self.d)
         print(lag_const.item())
-        loss = self.lambd*lag_const + self.c/2*lag_const**2 - ll.mean() + self.dag_embedding.dag.A.abs().mean()
+        loss = self.lambd*lag_const + self.c/2*lag_const**2 - ll.mean() + self.l1_weight*self.dag_embedding.dag.A.abs().mean()
         return loss
 
     def update_dual_param(self):

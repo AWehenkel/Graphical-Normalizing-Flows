@@ -10,16 +10,20 @@ from UMNN import UMNNMAFFlow
 import networkx as nx
 
 
-def train_toy(toy, load=True, nb_steps=20, nb_flow=1, folder=""):
+def train_toy(toy, load=True, nb_steps=20, folder=""):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
 
     device = "cpu" if not(torch.cuda.is_available()) else "cuda:0"
 
-    #model = UMNNMAFFlow(nb_flow=nb_flow, nb_in=4, hidden_derivative=[100, 100, 100], hidden_embedding=[50, 50, 50],
-    #                    embedding_s=10, nb_steps=nb_steps, device=device).to(device)
-    dim = 8
+    nb_samp = 100
+    batch_size = 100
+
+    x_test = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
+    x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
+
+    dim = x.shape[1]
     model = DAGNF(in_d=dim, hiddens_integrand=[200, 200, 200, 200], device=device)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
@@ -30,12 +34,6 @@ def train_toy(toy, load=True, nb_steps=20, nb_flow=1, folder=""):
         model.train()
         opt.load_state_dict(torch.load(toy + '/ADAM.pt'))
         logger.info("Model loaded.")
-
-    nb_samp = 100
-    batch_size = 100
-
-    x_test = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
-    x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     for epoch in range(10000):
         ll_tot = 0
@@ -63,14 +61,15 @@ def train_toy(toy, load=True, nb_steps=20, nb_flow=1, folder=""):
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test.item(), end-start))
         if epoch % 100 == 0:
-            def compute_ll_2spirals(x):
-                return model.compute_ll(torch.cat((x, torch.zeros(x.shape[0], dim-2)), 1))
-            def compute_ll_8gaussians(x):
-                return model.compute_ll(torch.cat((torch.zeros(x.shape[0], dim-2), x), 1))
-            ax = plt.subplot(1, 3, 1, aspect="equal")
-            vf.plt_flow(compute_ll_2spirals, ax)
-            ax = plt.subplot(1, 3, 2, aspect="equal")
-            vf.plt_flow(compute_ll_8gaussians, ax)
+            if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians"]:
+                def compute_ll_2spirals(x):
+                    return model.compute_ll(torch.cat((x, torch.zeros(x.shape[0], dim-2).to(device)), 1)).detach().cpu()
+                def compute_ll_8gaussians(x):
+                    return model.compute_ll(torch.cat((torch.zeros(x.shape[0], dim-2).to(device), x), 1)).detach().cpu()
+                ax = plt.subplot(1, 3, 1, aspect="equal")
+                vf.plt_flow(compute_ll_2spirals, ax)
+                ax = plt.subplot(1, 3, 2, aspect="equal")
+                vf.plt_flow(compute_ll_8gaussians, ax)
 
             # Plot DAG
             A = model.dag_embedding.dag.A.detach().numpy().T
@@ -88,14 +87,31 @@ def train_toy(toy, load=True, nb_steps=20, nb_flow=1, folder=""):
             nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
             #vf.plt_flow(model.compute_ll, ax)
-            plt.savefig("%s/flow_%d.pdf" % (toy, epoch))
-            torch.save(model.state_dict(), toy + '/model.pt')
-            torch.save(opt.state_dict(), toy + '/ADAM.pt')
+            plt.savefig("%s%s/flow_%d.pdf" % (folder, toy, epoch))
+            torch.save(model.state_dict(), folder + toy + '/model.pt')
+            torch.save(opt.state_dict(), folder + toy + '/ADAM.pt')
             G.clear()
             plt.clf()
             print(model.dag_embedding.dag.A)
 
 toy = "4-2spirals-8gaussians"
-if not(os.path.isdir(toy)):
-    os.makedirs(toy)
-train_toy(toy)
+
+import argparse
+datasets = ["8gaussians", "swissroll", "moons", "pinwheel", "cos", "2spirals", "checkerboard", "line", "line-noisy",
+            "circles", "joint_gaussian", "2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians"]
+
+parser = argparse.ArgumentParser(description='')
+parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy problem ?")
+parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
+parser.add_argument("-folder", default="", help="Folder")
+args = parser.parse_args()
+
+if args.dataset is None:
+    toys = datasets
+else:
+    toys = [args.dataset]
+
+for toy in toys:
+    if not(os.path.isdir(args.folder + toy)):
+        os.makedirs(args.folder + toy)
+    train_toy(toy, load=args.load, folder=args.folder)

@@ -74,11 +74,11 @@ def train(load=False, nb_steps=20, nb_flow=1, folder=""):
             i = 0
             for _, X in enumerate(dl_test):
                 cur_x = torch.tensor(X, device=device, dtype=torch.float)
-                loss = model.loss(cur_x)
-                ll_test += loss.item()
+                ll, _ = model.compute_ll(cur_x)
+                ll_test += ll.item()
                 i += 1
         ll_test /= i
-        logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
+        logger.info("epoch: {:d} - Train loss: {:4f} - Test log-likelihood: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test, end-start))
         if epoch % 5 == 0:
 
