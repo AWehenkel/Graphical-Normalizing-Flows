@@ -106,6 +106,7 @@ parser.add_argument("-load", default=False, action="store_true", help="Load a mo
 parser.add_argument("-folder", default="", help="Folder")
 args = parser.parse_args()
 
+
 if args.dataset is None:
     toys = datasets
 else:
