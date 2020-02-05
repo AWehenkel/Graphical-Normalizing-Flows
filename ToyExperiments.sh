@@ -5,4 +5,4 @@
 #SBATCH --mem=6000M
 #SBATCH --time=20:00:00
 source activate UMNN
-python ToyExperiments.py -dataset $1 -nb_flow $2 $3 $4 $5
+python ToyExperiments.py -dataset $1
