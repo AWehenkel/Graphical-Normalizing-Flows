@@ -75,7 +75,7 @@ def train(load=False, nb_steps=20, nb_flow=1, folder=""):
             for _, X in enumerate(dl_test):
                 cur_x = torch.tensor(X, device=device, dtype=torch.float)
                 ll, _ = model.compute_ll(cur_x)
-                ll_test += ll.item()
+                ll_test += ll.mean().item()
                 i += 1
         ll_test /= i
         logger.info("epoch: {:d} - Train loss: {:4f} - Test log-likelihood: {:4f} - Elapsed time per epoch {:4f} (seconds)".
@@ -84,7 +84,7 @@ def train(load=False, nb_steps=20, nb_flow=1, folder=""):
 
             # Plot DAG
             plt.figure()
-            A = model.dag_embedding.dag.A.detach().numpy().T
+            A = model.dag_embedding.dag.A.detach().cpu().numpy().T
             G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
             pos = nx.layout.fruchterman_reingold_layout(G)
             nodes = nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
