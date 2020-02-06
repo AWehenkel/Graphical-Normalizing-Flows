@@ -8,7 +8,7 @@ import lib.visualize_flow as vf
 import matplotlib.pyplot as plt
 from UMNN import UMNNMAFFlow
 import networkx as nx
-
+import numpy as np
 
 def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1., nb_epoch=10000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
@@ -76,6 +76,7 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
 
             # Plot DAG
             A = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
+            A /= A.sum() / (dim * np.log(dim))
             ax = plt.subplot(1, 3, 3)
             G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
             pos = nx.layout.spring_layout(G)

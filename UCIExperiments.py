@@ -7,7 +7,7 @@ import lib.visualize_flow as vf
 import matplotlib.pyplot as plt
 import networkx as nx
 import UCIdatasets
-
+import numpy as np
 
 def batch_iter(X, batch_size, shuffle=False):
     """
@@ -44,9 +44,10 @@ def load_data(name):
         raise ValueError('Unknown dataset')
 
 
-def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1., nb_epoch=10000,
-          network=[200, 200, 200], b_size=100):
-    logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
+def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", max_l1=1., nb_epoch=10000,
+          network=[200, 200, 200], b_size=100, all_args=None):
+    logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
+    logger.info(str(all_args))
 
     logger.info("Creating model...")
 
@@ -68,9 +69,9 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", 
 
     if load:
         logger.info("Loading model...")
-        model.load_state_dict(torch.load(toy + '/model.pt'))
+        model.load_state_dict(torch.load(path + '/model.pt'))
         model.train()
-        opt.load_state_dict(torch.load(toy + '/ADAM.pt'))
+        opt.load_state_dict(torch.load(path + '/ADAM.pt'))
         logger.info("Model loaded.")
 
     for epoch in range(nb_epoch):
@@ -114,6 +115,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", 
         if epoch % 5 == 0:
             # Plot DAG
             A = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
+            A /= A.sum() / (dim * np.log(dim))
             ax = plt.figure()
             G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
             pos = nx.layout.spring_layout(G)
@@ -128,9 +130,9 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", 
             nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
             #vf.plt_flow(model.compute_ll, ax)
-            plt.savefig("%s%s/flow_%d.pdf" % (folder, toy, epoch))
-            torch.save(model.state_dict(), folder + toy + '/model.pt')
-            torch.save(opt.state_dict(), folder + toy + '/ADAM.pt')
+            plt.savefig("%s/flow_%d.pdf" % (path, epoch))
+            torch.save(model.state_dict(), path + '/model.pt')
+            torch.save(opt.state_dict(), path + '/ADAM.pt')
             G.clear()
             plt.clf()
             print(A)
@@ -149,7 +151,8 @@ parser.add_argument("-b_size", default=100, type=int, help="Batch size")
 parser.add_argument("-network", default=[100, 100, 100, 100], nargs="+", type=int, help="NN hidden layers")
 
 args = parser.parse_args()
-
+from datetime import datetime
+now = datetime.now()
 
 if args.dataset is None:
     toys = datasets
@@ -157,7 +160,9 @@ else:
     toys = [args.dataset]
 
 for toy in toys:
-    if not(os.path.isdir(args.folder + toy)):
-        os.makedirs(args.folder + toy)
-    train(toy, load=args.load, folder=args.folder, nb_step_dual=args.nb_steps_dual, max_l1=args.max_l1,
-              nb_epoch=args.nb_epoch, network=args.network, b_size=args.b_size)
+    if args.folder == "":
+        path = toy + "/" + now.strftime("%m_%d_%Y_%H_%M_%S")
+    if not(os.path.isdir(path)):
+        os.makedirs(path)
+    train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, max_l1=args.max_l1,
+              nb_epoch=args.nb_epoch, network=args.network, b_size=args.b_size, all_args=args)
