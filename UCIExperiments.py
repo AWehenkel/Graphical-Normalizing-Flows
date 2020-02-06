@@ -115,7 +115,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
         if epoch % 5 == 0:
             # Plot DAG
             A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
-            A_thresholded = A_normal * (A_normal > .001).float()
+            A_thresholded = A_normal * (A_normal > .001)
             for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
                 A /= A.sum() / (dim * np.log(dim))
                 plt.figure()
