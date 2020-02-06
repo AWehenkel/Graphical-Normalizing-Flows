@@ -86,11 +86,11 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", 
         # Testing loop
         ll_test = 0.
         i = 0.
-        for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
+        for cur_x in batch_iter(data.test.x, shuffle=True, batch_size=batch_size):
             ll, _ = model.compute_ll(cur_x)
-            ll_tot += ll.mean().item()
+            ll_test += ll.mean().item()
             i += 1
-        ll_tot /= i
+        ll_test /= i
 
         # Update constraints
         if epoch % 1 == 0:
@@ -106,7 +106,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", 
 
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test, end-start))
-        if epoch % 100 == 0:
+        if epoch % 5 == 0:
             # Plot DAG
             A = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
             ax = plt.figure()
