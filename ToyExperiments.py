@@ -10,7 +10,7 @@ from UMNN import UMNNMAFFlow
 import networkx as nx
 
 
-def train_toy(toy, load=True, nb_steps=20, folder=""):
+def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder=""):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -52,7 +52,7 @@ def train_toy(toy, load=True, nb_steps=20, folder=""):
             with torch.no_grad():
                 model.dag_embedding.dag.constrainA()
 
-        if epoch % 100 == 0 and epoch != 0:
+        if epoch % nb_step_dual == 0 and epoch != 0:
             model.update_dual_param()
             if model.l1_weight < 1.:
                 model.l1_weight = model.l1_weight*1.4
@@ -107,6 +107,7 @@ parser = argparse.ArgumentParser(description='')
 parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy problem ?")
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
+parser.add_argument("-nb_steps_dual", default=100, help="number of step between updating Acyclicity constraint and sparsity constraint")
 args = parser.parse_args()
 
 
@@ -118,4 +119,4 @@ else:
 for toy in toys:
     if not(os.path.isdir(args.folder + toy)):
         os.makedirs(args.folder + toy)
-    train_toy(toy, load=args.load, folder=args.folder)
+    train_toy(toy, load=args.load, folder=args.folder, nb_step_dual=args.nb_steps_dual)
