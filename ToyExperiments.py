@@ -10,7 +10,7 @@ from UMNN import UMNNMAFFlow
 import networkx as nx
 
 
-def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1.):
+def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1., nb_epoch=10000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -35,7 +35,7 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
         opt.load_state_dict(torch.load(toy + '/ADAM.pt'))
         logger.info("Model loaded.")
 
-    for epoch in range(10000):
+    for epoch in range(nb_epoch):
         ll_tot = 0
         start = timer()
         for j in range(0, nb_samp, batch_size):
@@ -109,6 +109,7 @@ parser.add_argument("-load", default=False, action="store_true", help="Load a mo
 parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=100, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
 parser.add_argument("-max_l1", default=1., type=float, help="Maximum weight for l1 regularization")
+parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
 
 args = parser.parse_args()
 
@@ -121,4 +122,5 @@ else:
 for toy in toys:
     if not(os.path.isdir(args.folder + toy)):
         os.makedirs(args.folder + toy)
-    train_toy(toy, load=args.load, folder=args.folder, nb_step_dual=args.nb_steps_dual, max_l1=args.max_l1)
+    train_toy(toy, load=args.load, folder=args.folder, nb_step_dual=args.nb_steps_dual, max_l1=args.max_l1,
+              nb_epoch=args.nb_epoch)
