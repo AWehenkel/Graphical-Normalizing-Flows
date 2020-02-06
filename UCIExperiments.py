@@ -45,14 +45,14 @@ def load_data(name):
 
 
 def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1., nb_epoch=10000,
-          network=[200, 200, 200]):
+          network=[200, 200, 200], b_size=100):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
 
     device = "cpu" if not(torch.cuda.is_available()) else "cuda:0"
 
-    batch_size = 100
+    batch_size = b_size
 
     logger.info("Loading data...")
     data = load_data(dataset)
@@ -145,6 +145,8 @@ parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=100, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
 parser.add_argument("-max_l1", default=1., type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
+parser.add_argument("-b_size", default=100, type=int, help="Batch size")
+parser.add_argument("-network", default=[100, 100, 100, 100], nargs="+", type=int, help="NN hidden layers")
 
 args = parser.parse_args()
 
@@ -158,4 +160,4 @@ for toy in toys:
     if not(os.path.isdir(args.folder + toy)):
         os.makedirs(args.folder + toy)
     train(toy, load=args.load, folder=args.folder, nb_step_dual=args.nb_steps_dual, max_l1=args.max_l1,
-              nb_epoch=args.nb_epoch)
+              nb_epoch=args.nb_epoch, network=args.network, b_size=args.b_size)
