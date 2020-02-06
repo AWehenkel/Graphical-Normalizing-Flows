@@ -86,7 +86,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", 
         # Testing loop
         ll_test = 0.
         i = 0.
-        for cur_x in batch_iter(data.test.x, shuffle=True, batch_size=batch_size):
+        for cur_x in batch_iter(data.tst.x, shuffle=True, batch_size=batch_size):
             ll, _ = model.compute_ll(cur_x)
             ll_test += ll.mean().item()
             i += 1
