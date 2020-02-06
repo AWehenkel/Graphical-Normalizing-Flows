@@ -29,7 +29,7 @@ class DAGNN(nn.Module):
 
     def constrainA(self):
         #self.A /= (self.A.sum(1).unsqueeze(1).expand(-1, self.d) + 1e-5)
-        self.A *= (self.A.clone().abs() > .001).float()
+        self.A *= (self.A.clone().abs() > .0001).float()
         self.A *= 1. - torch.eye(self.d, device=self.device)
         return
 
@@ -108,7 +108,6 @@ class DAGNF(nn.Module):
     def loss(self, x):
         ll, _ = self.UMNN.compute_ll(x)
         lag_const = self.dag_embedding.dag.get_power_trace(self.c/self.d)
-        print(lag_const.item())
         loss = self.lambd*lag_const + self.c/2*lag_const**2 - ll.mean() + self.l1_weight*self.dag_embedding.dag.A.abs().mean()
         return loss
 
