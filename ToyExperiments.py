@@ -24,7 +24,7 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    model = DAGNF(in_d=dim, hiddens_integrand=[200, 200, 200, 200], device=device, l1_weight=.05)
+    model = DAGNF(in_d=dim, hiddens_integrand=[300, 300, 300, 300, 300], device=device, l1_weight=.01)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
 
