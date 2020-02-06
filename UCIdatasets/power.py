@@ -58,6 +58,16 @@ def load_data_split_with_noise():
     data_validate = data[-N_validate:]
     data_train = data[0:-N_validate]
 
+    # [global_active_power, voltage, sub_metering_[1:3], time]
+    """
+    0.global_active_power: household global minute-averaged active power (in kilowatt)
+    1.voltage: minute-averaged voltage (in volt)
+    2.sub_metering_1: energy sub-metering No. 1 (in watt-hour of active energy). It corresponds to the kitchen, containing mainly a dishwasher, an oven and a microwave (hot plates are not electric but gas powered).
+    3.sub_metering_2: energy sub-metering No. 2 (in watt-hour of active energy). It corresponds to the laundry room, containing a washing-machine, a tumble-drier, a refrigerator and a light.
+    4.sub_metering_3: energy sub-metering No. 3 (in watt-hour of active energy). It corresponds to an electric water-heater and an air-conditioner.
+    5.time: time in format hh:mm:ss
+    """
+
     return data_train, data_validate, data_test
 
 

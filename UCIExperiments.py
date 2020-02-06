@@ -44,7 +44,8 @@ def load_data(name):
         raise ValueError('Unknown dataset')
 
 
-def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1., nb_epoch=10000):
+def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1., nb_epoch=10000,
+          network=[200, 200, 200]):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -61,7 +62,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", 
     logger.info("Data loaded.")
 
     dim = data.trn.x.shape[1]
-    model = DAGNF(in_d=dim, hiddens_integrand=[300, 300, 300, 300, 300], device=device, l1_weight=.01)
+    model = DAGNF(in_d=dim, hiddens_integrand=network, device=device, l1_weight=.01)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
 
@@ -75,13 +76,17 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", 
     for epoch in range(nb_epoch):
         ll_tot = 0
         start = timer()
+        i = 0
         # Training loop
         for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
             loss = model.loss(cur_x)
             ll_tot += loss.item()
+            i += 1
             opt.zero_grad()
             loss.backward(retain_graph=True)
             opt.step()
+
+        ll_tot /= i
 
         # Testing loop
         ll_test = 0.
