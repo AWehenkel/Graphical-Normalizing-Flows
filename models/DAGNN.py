@@ -27,9 +27,9 @@ class DAGNN(nn.Module):
         return (x.unsqueeze(1).expand(-1, self.d, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))\
             .permute(0, 2, 1).contiguous().view(x.shape[0], -1)
 
-    def constrainA(self):
+    def constrainA(self, zero_threshold=.0001):
         #self.A /= (self.A.sum(1).unsqueeze(1).expand(-1, self.d) + 1e-5)
-        self.A *= (self.A.clone().abs() > .0001).float()
+        self.A *= (self.A.clone().abs() > zero_threshold).float()
         self.A *= 1. - torch.eye(self.d, device=self.device)
         return
 

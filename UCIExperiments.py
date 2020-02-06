@@ -100,7 +100,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, folder="", 
         # Update constraints
         if epoch % 1 == 0:
             with torch.no_grad():
-                model.dag_embedding.dag.constrainA()
+                model.dag_embedding.dag.constrainA(zero_threshold=0.)
 
         if epoch % nb_step_dual == 0 and epoch != 0:
             model.update_dual_param()
