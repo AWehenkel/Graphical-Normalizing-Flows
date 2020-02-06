@@ -110,8 +110,8 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
 
         end = timer()
 
-        logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
-                    format(epoch, ll_tot, ll_test, end-start))
+        logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
+                    format(epoch, ll_tot, ll_test, model.DAGness(), end-start))
         if epoch % 5 == 0:
             # Plot DAG
             A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T

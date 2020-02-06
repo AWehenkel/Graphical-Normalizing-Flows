@@ -105,6 +105,9 @@ class DAGNF(nn.Module):
     def compute_ll(self, x):
         return self.UMNN.compute_ll(x)
 
+    def DAGness(self):
+        return self.dag_embedding.dag.get_power_trace(self.c / self.d)
+
     def loss(self, x):
         ll, _ = self.UMNN.compute_ll(x)
         lag_const = self.dag_embedding.dag.get_power_trace(self.c/self.d)
