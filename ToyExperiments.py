@@ -107,8 +107,8 @@ parser = argparse.ArgumentParser(description='')
 parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy problem ?")
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
-parser.add_argument("-nb_steps_dual", default=100, help="number of step between updating Acyclicity constraint and sparsity constraint")
-parser.add_argument("-max_l1", default=1., help="Maximum weight for l1 regularization")
+parser.add_argument("-nb_steps_dual", default=100, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
+parser.add_argument("-max_l1", default=1., type=float, help="Maximum weight for l1 regularization")
 
 args = parser.parse_args()
 
