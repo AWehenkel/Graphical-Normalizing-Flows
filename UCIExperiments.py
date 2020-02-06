@@ -114,23 +114,24 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                     format(epoch, ll_tot, ll_test, end-start))
         if epoch % 5 == 0:
             # Plot DAG
-            A = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
-            A /= A.sum() / (dim * np.log(dim))
-            ax = plt.figure()
-            G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-            pos = nx.layout.spring_layout(G)
-            nodes = nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
-            edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-            edges = nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
-                                           arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                           edge_cmap=plt.cm.Blues, width=5*weights)
-            labels = {}
-            for i in range(dim):
-                labels[i] = str(r'$%d$' % i)
-            nx.draw_networkx_labels(G, pos, labels, font_size=12)
+            A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
+            A_thresholded = A_normal * (A_normal > .001).float()
+            for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
+                A /= A.sum() / (dim * np.log(dim))
+                plt.figure()
+                G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
+                pos = nx.layout.spring_layout(G)
+                nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
+                edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
+                nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
+                                               arrowsize=3, connectionstyle='arc3,rad=0.2',
+                                               edge_cmap=plt.cm.Blues, width=5*weights)
+                labels = {}
+                for i in range(dim):
+                    labels[i] = str(r'$%d$' % i)
+                nx.draw_networkx_labels(G, pos, labels, font_size=12)
+                plt.savefig("%s/DAG_%s_%d.pdf" % (path, name, epoch))
 
-            #vf.plt_flow(model.compute_ll, ax)
-            plt.savefig("%s/flow_%d.pdf" % (path, epoch))
             torch.save(model.state_dict(), path + '/model.pt')
             torch.save(opt.state_dict(), path + '/ADAM.pt')
             G.clear()
