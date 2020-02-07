@@ -88,7 +88,7 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
             for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
                 A /= A.sum() / np.log(dim)
                 ax = plt.subplot(2, 2, 1 + j)
-                plt.title(name + "DAG")
+                plt.title(name + " DAG")
                 G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
                 pos = nx.layout.spring_layout(G)
                 nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
@@ -102,7 +102,7 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
                 nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
                 ax = plt.subplot(2, 2, 2 + j)
-                ax.matshow(A)
+                ax.matshow(np.log(A))
                 j += 2
 
             #vf.plt_flow(model.compute_ll, ax)
