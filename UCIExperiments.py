@@ -77,6 +77,17 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
     for epoch in range(nb_epoch):
         ll_tot = 0
         start = timer()
+
+        # Update constraints
+        if epoch % 1 == 0:
+            with torch.no_grad():
+                model.dag_embedding.dag.constrainA(zero_threshold=0.)
+
+        if epoch % nb_step_dual == 0 and epoch != 0:
+            model.update_dual_param()
+            if model.l1_weight < max_l1:
+                model.l1_weight = model.l1_weight * 1.4
+
         i = 0
         # Training loop
         for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
@@ -97,16 +108,6 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
             ll_test += ll.mean().item()
             i += 1
         ll_test /= i
-
-        # Update constraints
-        if epoch % 1 == 0:
-            with torch.no_grad():
-                model.dag_embedding.dag.constrainA(zero_threshold=0.)
-
-        if epoch % nb_step_dual == 0 and epoch != 0:
-            model.update_dual_param()
-            if model.l1_weight < max_l1:
-                model.l1_weight = model.l1_weight*1.4
 
         end = timer()
 
