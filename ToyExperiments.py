@@ -69,29 +69,39 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
                 def compute_ll_8gaussians(x):
                     return model.compute_ll(torch.cat((torch.zeros(x.shape[0], dim-2).to(device), x), 1))
                 with torch.no_grad():
-                    ax = plt.subplot(1, 3, 1, aspect="equal")
+                    ax = plt.subplot(1, 2, 1, aspect="equal")
                     vf.plt_flow(compute_ll_2spirals, ax, device=device)
-                    ax = plt.subplot(1, 3, 2, aspect="equal")
+                    ax = plt.subplot(1, 2, 2, aspect="equal")
                     vf.plt_flow(compute_ll_8gaussians, ax, device=device)
+                    plt.savefig("%s%s/flow_%d.pdf" % (folder, toy, epoch))
 
             # Plot DAG
-            A = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
-            A /= A.sum() / (dim * np.log(dim))
-            ax = plt.subplot(1, 3, 3)
-            G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-            pos = nx.layout.spring_layout(G)
-            nodes = nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
-            edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-            edges = nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
-                                           arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                           edge_cmap=plt.cm.Blues, width=5*weights)
-            labels = {}
-            for i in range(dim):
-                labels[i] = str(r'$%d$' % i)
-            nx.draw_networkx_labels(G, pos, labels, font_size=12)
+            A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
+            A_thresholded = A_normal * (A_normal > .001)
+            i = 0
+            for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
+                A /= A.sum() / np.log(dim)
+                ax = plt.subplot(2, 2, 1 + i)
+                plt.title(name + "DAG")
+                G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
+                pos = nx.layout.spring_layout(G)
+                nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
+                edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
+                nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
+                                               arrowsize=3, connectionstyle='arc3,rad=0.2',
+                                               edge_cmap=plt.cm.Blues, width=5*weights)
+                labels = {}
+                for i in range(dim):
+                    labels[i] = str(r'$%d$' % i)
+                nx.draw_networkx_labels(G, pos, labels, font_size=12)
+
+                plt.subplot(2, 2, 2 + i)
+                plt.title(name + "Adjacency Matrix")
+                plt.matshow(A)
+                i += 2
 
             #vf.plt_flow(model.compute_ll, ax)
-            plt.savefig("%s%s/flow_%d.pdf" % (folder, toy, epoch))
+            plt.savefig("%s%s/DAG_%d.pdf" % (folder, toy, epoch))
             torch.save(model.state_dict(), folder + toy + '/model.pt')
             torch.save(opt.state_dict(), folder + toy + '/ADAM.pt')
             G.clear()
