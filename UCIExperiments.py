@@ -103,7 +103,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
         # Testing loop
         ll_test = 0.
         i = 0.
-        for cur_x in batch_iter(data.tst.x, shuffle=True, batch_size=batch_size):
+        for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
             ll, _ = model.compute_ll(cur_x)
             ll_test += ll.mean().item()
             i += 1
@@ -111,7 +111,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
 
         end = timer()
 
-        logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
+        logger.info("epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test, model.DAGness(), end-start))
         if epoch % 5 == 0:
             # Plot DAG
