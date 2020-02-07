@@ -145,7 +145,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                 j += 2
 
             # vf.plt_flow(model.compute_ll, ax)
-
+            plt.savefig("%s/DAG_%d.pdf" % (path, epoch))
             torch.save(model.state_dict(), path + '/model.pt')
             torch.save(opt.state_dict(), path + '/ADAM.pt')
             G.clear()
