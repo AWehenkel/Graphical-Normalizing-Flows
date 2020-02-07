@@ -78,10 +78,10 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
             # Plot DAG
             A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
             A_thresholded = A_normal * (A_normal > .001)
-            i = 0
+            j = 0
             for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
                 A /= A.sum() / np.log(dim)
-                ax = plt.subplot(2, 2, 1 + i)
+                ax = plt.subplot(2, 2, 1 + j)
                 plt.title(name + "DAG")
                 G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
                 pos = nx.layout.spring_layout(G)
@@ -95,10 +95,10 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
                     labels[i] = str(r'$%d$' % i)
                 nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
-                plt.subplot(2, 2, 2 + i)
+                plt.subplot(2, 2, 2 + j)
                 plt.title(name + "Adjacency Matrix")
                 plt.matshow(A)
-                i += 2
+                j += 2
 
             #vf.plt_flow(model.compute_ll, ax)
             plt.savefig("%s%s/DAG_%d.pdf" % (folder, toy, epoch))
