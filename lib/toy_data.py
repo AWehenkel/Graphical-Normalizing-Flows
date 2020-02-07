@@ -30,6 +30,18 @@ def inf_train_gen(data, rng=None, batch_size=200):
         data2 = inf_train_gen("4-2spirals-8gaussians", rng=rng, batch_size=batch_size)
         return np.concatenate([data1, data2], axis=1)
 
+    if data == "8-MIX":
+        data1 = inf_train_gen("2spirals", rng=rng, batch_size=batch_size)
+        data2 = inf_train_gen("8gaussians", rng=rng, batch_size=batch_size)
+        data3 = inf_train_gen("swissroll", rng=rng, batch_size=batch_size)
+        data4 = inf_train_gen("circles", rng=rng, batch_size=batch_size)
+        data5 = inf_train_gen("moons", rng=rng, batch_size=batch_size)
+        data6 = inf_train_gen("pinwheel", rng=rng, batch_size=batch_size)
+        data7 = inf_train_gen("checkerboard", rng=rng, batch_size=batch_size)
+        data8 = inf_train_gen("line", rng=rng, batch_size=batch_size)
+        return np.concatenate([data1, data2, data3, data4, data5, data6, data7, data8], axis=1)
+
+
     if data == "swissroll":
         data = sklearn.datasets.make_swiss_roll(n_samples=batch_size, noise=1.0)[0]
         data = data.astype("float32")[:, [0, 2]]
