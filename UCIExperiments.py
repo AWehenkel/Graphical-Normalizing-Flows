@@ -3,7 +3,7 @@ import torch
 from timeit import default_timer as timer
 import lib.utils as utils
 import os
-import lib.visualize_flow as vf
+import matplotlib
 import matplotlib.pyplot as plt
 import networkx as nx
 import UCIdatasets
@@ -115,23 +115,36 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                     format(epoch, ll_tot, ll_test, model.DAGness(), end-start))
         if epoch % 5 == 0:
             # Plot DAG
+            # Plot DAG
+            font = {'family': 'normal',
+                    'weight': 'bold',
+                    'size': 12}
+
+            matplotlib.rc('font', **font)
             A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
             A_thresholded = A_normal * (A_normal > .001)
+            j = 0
             for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
-                A /= A.sum() / (dim * np.log(dim))
-                plt.figure()
+                A /= A.sum() / np.log(dim)
+                ax = plt.subplot(2, 2, 1 + j)
+                plt.title(name + " DAG")
                 G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
                 pos = nx.layout.spring_layout(G)
                 nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
                 edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
                 nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
-                                               arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                               edge_cmap=plt.cm.Blues, width=5*weights)
+                                       arrowsize=3, connectionstyle='arc3,rad=0.2',
+                                       edge_cmap=plt.cm.Blues, width=5 * weights)
                 labels = {}
                 for i in range(dim):
                     labels[i] = str(r'$%d$' % i)
                 nx.draw_networkx_labels(G, pos, labels, font_size=12)
-                plt.savefig("%s/DAG_%s_%d.pdf" % (path, name, epoch))
+
+                ax = plt.subplot(2, 2, 2 + j)
+                ax.matshow(np.log(A))
+                j += 2
+
+            # vf.plt_flow(model.compute_ll, ax)
 
             torch.save(model.state_dict(), path + '/model.pt')
             torch.save(opt.state_dict(), path + '/ADAM.pt')
