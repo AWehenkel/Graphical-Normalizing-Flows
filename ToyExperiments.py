@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from UMNN import UMNNMAFFlow
 import networkx as nx
 import numpy as np
+import matplotlib
 
 def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1., nb_epoch=10000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
@@ -76,6 +77,11 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
                     plt.savefig("%s%s/flow_%d.pdf" % (folder, toy, epoch))
 
             # Plot DAG
+            font = {'family': 'normal',
+                    'weight': 'bold',
+                    'size': 12}
+
+            matplotlib.rc('font', **font)
             A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
             A_thresholded = A_normal * (A_normal > .001)
             j = 0
@@ -95,9 +101,8 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
                     labels[i] = str(r'$%d$' % i)
                 nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
-                plt.subplot(2, 2, 2 + j)
-                plt.title(name + "Adjacency Matrix")
-                plt.matshow(A)
+                ax = plt.subplot(2, 2, 2 + j)
+                ax.matshow(A)
                 j += 2
 
             #vf.plt_flow(model.compute_ll, ax)
