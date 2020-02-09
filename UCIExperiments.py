@@ -153,7 +153,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
             print(A)
 
 import argparse
-datasets = ["power", "gas", "bsds300"]
+datasets = ["power", "gas", "bsds300", "miniboone"]
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy problem ?")
