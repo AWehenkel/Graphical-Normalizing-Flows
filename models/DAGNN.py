@@ -13,12 +13,10 @@ class IdentityNN(nn.Module):
 class DAGNN(nn.Module):
     def __init__(self, d, device="cpu", soft_thresholding=True, net=None):
         super().__init__()
-        #self.A = nn.Parameter(torch.randn(d, d, device=device)*.1 + .5)
-        self.A = nn.Parameter(torch.tensor([[0., 1., 0., 0.], [0., 0., 0., 0.], [0., 0., 0., 1.], [0., 0., 0., 0.]]).float())
+        self.A = nn.Parameter(torch.randn(d, d, device=device)*.1 + .5)
         self.d = d
         self.device = device
         self.s_thresh = soft_thresholding
-        #self.net = net if net is not None else IdentityNN()
         self.net = net if net is not None else IdentityNN()
 
     def to(self, device):
