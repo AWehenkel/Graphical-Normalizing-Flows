@@ -13,7 +13,6 @@ class MLP(nn.Module):
         layers = []
         for dim_in, dim_out in zip(layers_dim[:-1], layers_dim[1:]):
             layers += [nn.Linear(dim_in, dim_out), act_f]
-        print(layers)
         self.net = nn.Sequential(*layers).to(device)
 
     def forward(self, x):

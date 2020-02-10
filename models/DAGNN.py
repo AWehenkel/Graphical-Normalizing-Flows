@@ -13,10 +13,12 @@ class IdentityNN(nn.Module):
 class DAGNN(nn.Module):
     def __init__(self, d, device="cpu", soft_thresholding=True, net=None):
         super().__init__()
-        self.A = nn.Parameter(torch.randn(d, d, device=device)*.1 + .5)
+        #self.A = nn.Parameter(torch.randn(d, d, device=device)*.1 + .5)
+        self.A = nn.Parameter(torch.tensor([[0., 1., 0., 0.], [0., 0., 0., 0.], [0., 0., 0., 1.], [0., 0., 0., 0.]]).float())
         self.d = d
         self.device = device
         self.s_thresh = soft_thresholding
+        #self.net = net if net is not None else IdentityNN()
         self.net = net if net is not None else IdentityNN()
 
     def to(self, device):
@@ -30,11 +32,11 @@ class DAGNN(nn.Module):
     def forward(self, x):
         if self.s_thresh:
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.soft_thresholded_A().unsqueeze(0)
-                 .expand(x.shape[0], -1, -1)).permute(0, 2, 1).contiguous().view(x.shape[0]*self.d, -1)
+                 .expand(x.shape[0], -1, -1)).view(x.shape[0]*self.d, -1)
         else:
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))\
-                .permute(0, 2, 1).contiguous().view(x.shape[0]*self.d, -1)
-        return self.net(e).contiguous().view(x.shape[0], -1)
+                .view(x.shape[0]*self.d, -1)
+        return self.net(e).view(x.shape[0], self.d, -1).permute(0, 2, 1).contiguous().view(x.shape[0], -1)
 
     def constrainA(self, zero_threshold=.0001):
         #self.A /= (self.A.sum(1).unsqueeze(1).expand(-1, self.d) + 1e-5)
@@ -79,7 +81,6 @@ class DAGEmbedding(nn.Module):
 
     def make_embeding(self, x_made, context=None):
         b_size = x_made.shape[0]
-        self.m_embeding = self.dag.forward(x_made)
         self.m_embeding = torch.cat((self.dag.forward(x_made), torch.eye(self.in_d, device=self.device).unsqueeze(0)
                                      .expand(b_size, -1, -1).view(b_size, -1)), 1)
         return self.m_embeding

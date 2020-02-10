@@ -10,7 +10,7 @@ import networkx as nx
 import numpy as np
 import matplotlib
 
-def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1., nb_epoch=10000):
+def train_toy(toy, load=True, nb_step_dual=100, nb_steps=50, folder="", max_l1=1., nb_epoch=10000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -24,8 +24,8 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    emb_net = None#MLP(dim, hidden=[100, 100, 100], out_d=10, device=device)
-    model = DAGNF(in_d=dim, hidden_integrand=[100, 100, 100], emb_d=10, emb_net=emb_net, device=device,
+    emb_net = MLP(dim, hidden=[50, 50, 50], out_d=2, device=device)
+    model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=2, emb_net=emb_net, device=device,
                   l1_weight=.01, nb_steps=nb_steps)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
@@ -122,7 +122,7 @@ parser = argparse.ArgumentParser(description='')
 parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy problem ?")
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
-parser.add_argument("-nb_steps_dual", default=100, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
+parser.add_argument("-nb_steps_dual", default=50, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
 parser.add_argument("-max_l1", default=1., type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
 

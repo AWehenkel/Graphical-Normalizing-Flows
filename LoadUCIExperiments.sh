@@ -6,4 +6,5 @@
 #SBATCH --time=20:00:00
 IN=$5
 arrIN=(${IN//,/ })
+source activate UMNN
 python UCIExperiments.py -dataset $1 -nb_steps_dual $2 -max_l1 $3 -nb_epoch $4 -network ${arrIN[*]} -b_size $6 -load -folder $7
