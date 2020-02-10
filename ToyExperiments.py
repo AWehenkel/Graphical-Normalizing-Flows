@@ -1,12 +1,11 @@
 import lib.toy_data as toy_data
-from models import DAGNF
+from models import DAGNF, MLP
 import torch
 from timeit import default_timer as timer
 import lib.utils as utils
 import os
 import lib.visualize_flow as vf
 import matplotlib.pyplot as plt
-from UMNN import UMNNMAFFlow
 import networkx as nx
 import numpy as np
 import matplotlib
@@ -25,7 +24,9 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    model = DAGNF(in_d=dim, hidden_integrand=[300, 300, 300, 300, 300], device=device, l1_weight=.01)
+    emb_net = None#MLP(dim, hidden=[100, 100, 100], out_d=10, device=device)
+    model = DAGNF(in_d=dim, hidden_integrand=[100, 100, 100], emb_d=10, emb_net=emb_net, device=device,
+                  l1_weight=.01, nb_steps=nb_steps)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
 
@@ -41,9 +42,6 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
         start = timer()
         for j in range(0, nb_samp, batch_size):
             cur_x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=batch_size)).to(device)
-            print(cur_x.shape)
-            #ll, _ = model.compute_ll(cur_x)
-            #loss = -ll.mean()#
             loss = model.loss(cur_x)
             ll_tot += loss.item()
             opt.zero_grad()
@@ -61,8 +59,8 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
         end = timer()
         ll_test, _ = model.compute_ll(x_test)
         ll_test = -ll_test.mean()
-        logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
-                    format(epoch, ll_tot, ll_test.item(), end-start))
+        logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
+                    format(epoch, ll_tot, ll_test.item(), model.DAGness(), end-start))
         if epoch % 100 == 0:
             if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians"]:
                 def compute_ll_2spirals(x):
@@ -113,7 +111,7 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=20, folder="", max_l1=1
             plt.clf()
             print(A)
 
-toy = "4-2spirals-8gaussians"
+toy = "2spirals-8gaussians"
 
 import argparse
 datasets = ["8gaussians", "swissroll", "moons", "pinwheel", "cos", "2spirals", "checkerboard", "line", "line-noisy",

@@ -178,7 +178,7 @@ parser.add_argument("-max_l1", default=1., type=float, help="Maximum weight for 
 parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
 parser.add_argument("-b_size", default=100, type=int, help="Batch size")
 parser.add_argument("-int_net", default=[100, 100, 100, 100], nargs="+", type=int, help="NN hidden layers of UMNN")
-parser.add_argument("-emb_net", default=[100, 100, 100, 100], nargs="+", type=int, help="NN layers of embedding")
+parser.add_argument("-emb_net", default=[100, 100, 100, 10], nargs="+", type=int, help="NN layers of embedding")
 parser.add_argument("-UMNN_MAF", default=False, action="store_true", help="replace the DAG-NF by a UMNN-MAF")
 
 args = parser.parse_args()

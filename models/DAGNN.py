@@ -30,11 +30,11 @@ class DAGNN(nn.Module):
     def forward(self, x):
         if self.s_thresh:
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.soft_thresholded_A().unsqueeze(0)
-                 .expand(x.shape[0], -1, -1)).permute(0, 2, 1).contiguous().view(x.shape[0], -1)
+                 .expand(x.shape[0], -1, -1)).permute(0, 2, 1).contiguous().view(x.shape[0]*self.d, -1)
         else:
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))\
-                .permute(0, 2, 1).contiguous().view(x.shape[0], -1)
-        return self.net(e)
+                .permute(0, 2, 1).contiguous().view(x.shape[0]*self.d, -1)
+        return self.net(e).contiguous().view(x.shape[0], -1)
 
     def constrainA(self, zero_threshold=.0001):
         #self.A /= (self.A.sum(1).unsqueeze(1).expand(-1, self.d) + 1e-5)
