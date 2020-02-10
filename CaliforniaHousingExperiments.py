@@ -37,7 +37,7 @@ def train(load=False, nb_steps=20, nb_flow=1, folder=""):
     dl_valid = torch.utils.data.DataLoader(dataset=d_valid, batch_size=batch_size, num_workers=n_worker, shuffle=shuffle)
 
     dim = d_train[0].shape[0]
-    model = DAGNF(in_d=dim, hiddens_integrand=[200, 200, 200, 200], device=device)
+    model = DAGNF(in_d=dim, hidden_integrand=[200, 200, 200, 200], device=device)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
 

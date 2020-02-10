@@ -1,4 +1,4 @@
-from models import DAGNF
+from models import DAGNF, MLP
 import torch
 from timeit import default_timer as timer
 import lib.utils as utils
@@ -47,7 +47,7 @@ def load_data(name):
 
 
 def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", max_l1=1., nb_epoch=10000,
-          network=[200, 200, 200], b_size=100, umnn_maf=False, all_args=None):
+          int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, all_args=None):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -66,10 +66,13 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
 
     dim = data.trn.x.shape[1]
     if umnn_maf:
-        model = UMNNMAFFlow(nb_flow=1, nb_in=dim, hidden_derivative=network, hidden_embedding=[200, 200, 200],
-                            embedding_s=10, nb_steps=nb_steps, device=device).to(device)
+        model = UMNNMAFFlow(nb_flow=1, nb_in=dim, hidden_derivative=int_net, hidden_embedding=emb_net[:-1],
+                            embedding_s=emb_net[-1], nb_steps=nb_steps, device=device).to(device)
     else:
-        model = DAGNF(in_d=dim, hiddens_integrand=network, device=device, l1_weight=.01, nb_steps=nb_steps)
+        if emb_net is not None:
+            emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1])
+        model = DAGNF(in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_net=emb_net, device=device,
+                      l1_weight=.01, nb_steps=nb_steps)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
 
@@ -122,7 +125,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                 "epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                 format(epoch, ll_tot, ll_test, end - start))
         else:
-            logger.info("epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
+            logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                         format(epoch, ll_tot, ll_test, model.DAGness(), end-start))
         if epoch % 5 == 0:
 
@@ -174,7 +177,8 @@ parser.add_argument("-nb_steps_dual", default=100, type=int, help="number of ste
 parser.add_argument("-max_l1", default=1., type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
 parser.add_argument("-b_size", default=100, type=int, help="Batch size")
-parser.add_argument("-network", default=[100, 100, 100, 100], nargs="+", type=int, help="NN hidden layers")
+parser.add_argument("-int_net", default=[100, 100, 100, 100], nargs="+", type=int, help="NN hidden layers of UMNN")
+parser.add_argument("-emn_net", default=[100, 100, 100, 100], nargs="+", type=int, help="NN layers of embedding")
 parser.add_argument("-UMNN_MAF", default=False, action="store_true", help="replace the DAG-NF by a UMNN-MAF")
 
 args = parser.parse_args()
@@ -190,6 +194,5 @@ for toy in toys:
     path = toy + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
     if not(os.path.isdir(path)):
         os.makedirs(path)
-    train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, max_l1=args.max_l1,
-              nb_epoch=args.nb_epoch, network=args.network, b_size=args.b_size, all_args=args,
-          umnn_maf=args.UMNN_MAF)
+    train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, max_l1=args.max_l1, nb_epoch=args.nb_epoch,
+          int_net=args.int_net, emb_net=args.emb_net, b_size=args.b_size, all_args=args, umnn_maf=args.UMNN_MAF)

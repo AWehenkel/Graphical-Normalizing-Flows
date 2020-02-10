@@ -2,15 +2,22 @@ import torch
 import torch.nn as nn
 from UMNN import IntegrandNetwork, UMNNMAF
 
+class IdentityNN(nn.Module):
+    def __init__(self):
+        super().__init__()
 
-#TODO: Preprocess independently x or dot product with A
+    def forward(self, x):
+        return x
+
+
 class DAGNN(nn.Module):
-    def __init__(self, d, device="cpu", soft_thresholding=True):
+    def __init__(self, d, device="cpu", soft_thresholding=True, net=None):
         super().__init__()
         self.A = nn.Parameter(torch.randn(d, d, device=device)*.1 + .5)
         self.d = d
         self.device = device
         self.s_thresh = soft_thresholding
+        self.net = net if net is not None else IdentityNN()
 
     def to(self, device):
         self.A = self.A.to(device)
@@ -22,10 +29,12 @@ class DAGNN(nn.Module):
 
     def forward(self, x):
         if self.s_thresh:
-            return (x.unsqueeze(1).expand(-1, self.d, -1) * self.soft_thresholded_A().unsqueeze(0).expand(x.shape[0], -1, -1)) \
+            e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.soft_thresholded_A().unsqueeze(0)
+                 .expand(x.shape[0], -1, -1)).permute(0, 2, 1).contiguous().view(x.shape[0], -1)
+        else:
+            e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))\
                 .permute(0, 2, 1).contiguous().view(x.shape[0], -1)
-        return (x.unsqueeze(1).expand(-1, self.d, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))\
-            .permute(0, 2, 1).contiguous().view(x.shape[0], -1)
+        return self.net(e)
 
     def constrainA(self, zero_threshold=.0001):
         #self.A /= (self.A.sum(1).unsqueeze(1).expand(-1, self.d) + 1e-5)
@@ -53,13 +62,14 @@ class DAGNN(nn.Module):
 
 
 class DAGEmbedding(nn.Module):
-    def __init__(self, in_d, hiddens_integrand=[50, 50, 50, 50], out_dim=2, act_func='ELU', device="cpu"):
+    def __init__(self, in_d, emb_d=-1, emb_net=None, hiddens_integrand=[50, 50, 50, 50], act_func='ELU', device="cpu"):
         super().__init__()
         self.m_embeding = None
         self.device = device
         self.in_d = in_d
-        self.dag = DAGNN(in_d, device=device)
-        self.parallel_nets = IntegrandNetwork(in_d, 1 + in_d + in_d, hiddens_integrand, 1, act_func=act_func,
+        self.emb_d = in_d if emb_net is None else emb_d
+        self.dag = DAGNN(in_d, net=emb_net, device=device)
+        self.parallel_nets = IntegrandNetwork(in_d, 1 + in_d + self.emb_d, hiddens_integrand, 1, act_func=act_func,
                                               device=device)
 
     def to(self, device):
@@ -79,10 +89,10 @@ class DAGEmbedding(nn.Module):
 
 
 class DAGNF(nn.Module):
-    def __init__(self, in_d, hiddens_integrand=[50, 50, 50], out_made=1, act_func='ELU',
+    def __init__(self, in_d, hidden_integrand=[50, 50, 50], emb_net=None, emb_d=-1, act_func='ELU',
                  nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1.):
         super().__init__()
-        self.dag_embedding = DAGEmbedding(in_d, hiddens_integrand, out_made, act_func, device)
+        self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device)
         self.UMNN = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, device=device, solver=solver)
         self.lambd = .5
         self.c = .5
