@@ -70,7 +70,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                             embedding_s=emb_net[-1], nb_steps=nb_steps, device=device).to(device)
     else:
         if emb_net is not None:
-            emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1])
+            emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
         model = DAGNF(in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_net=emb_net, device=device,
                       l1_weight=.01, nb_steps=nb_steps)
 
