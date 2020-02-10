@@ -97,7 +97,8 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
         i = 0
         # Training loop
         for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
-            loss = model.loss(cur_x) if not umnn_maf else model.compute_ll(cur_x)[0].mean()
+            loss = model.loss(cur_x) if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
+            print(loss.item())
             ll_tot += loss.item()
             i += 1
             opt.zero_grad()
