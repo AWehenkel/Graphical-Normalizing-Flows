@@ -158,11 +158,12 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                     ax = plt.subplot(2, 2, 2 + j)
                     ax.matshow(np.log(A))
                     j += 2
-                    G.clear()
-                    plt.clf()
-
-                # vf.plt_flow(model.compute_ll, ax)
+                    # vf.plt_flow(model.compute_ll, ax)
                 plt.savefig("%s/DAG_%d.pdf" % (path, epoch))
+                G.clear()
+                plt.clf()
+
+
             torch.save(model.state_dict(), path + '/model.pt')
             torch.save(opt.state_dict(), path + '/ADAM.pt')
 
