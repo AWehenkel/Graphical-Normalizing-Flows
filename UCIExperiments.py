@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import UCIdatasets
 import numpy as np
+from UMNN import UMNNMAFFlow
+
 
 def batch_iter(X, batch_size, shuffle=False):
     """
@@ -45,7 +47,7 @@ def load_data(name):
 
 
 def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", max_l1=1., nb_epoch=10000,
-          network=[200, 200, 200], b_size=100, all_args=None):
+          network=[200, 200, 200], b_size=100, umnn_maf=False, all_args=None):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -63,7 +65,11 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
     logger.info("Data loaded.")
 
     dim = data.trn.x.shape[1]
-    model = DAGNF(in_d=dim, hiddens_integrand=network, device=device, l1_weight=.01)
+    if umnn_maf:
+        model = UMNNMAFFlow(nb_flow=1, nb_in=dim, hidden_derivative=network, hidden_embedding=[200, 200, 200],
+                            embedding_s=10, nb_steps=nb_steps, device=device).to(device)
+    else:
+        model = DAGNF(in_d=dim, hiddens_integrand=network, device=device, l1_weight=.01, nb_steps=nb_steps)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
 
@@ -79,11 +85,11 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
         start = timer()
 
         # Update constraints
-        if epoch % 1 == 0:
+        if epoch % 1 == 0 and not umnn_maf:
             with torch.no_grad():
                 model.dag_embedding.dag.constrainA(zero_threshold=0.)
 
-        if epoch % nb_step_dual == 0 and epoch != 0:
+        if epoch % nb_step_dual == 0 and epoch != 0 and not umnn_maf:
             model.update_dual_param()
             if model.l1_weight < max_l1:
                 model.l1_weight = model.l1_weight * 1.4
@@ -91,7 +97,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
         i = 0
         # Training loop
         for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
-            loss = model.loss(cur_x)
+            loss = model.loss(cur_x) if not umnn_maf else model.compute_ll(cur_x)[0].mean()
             ll_tot += loss.item()
             i += 1
             opt.zero_grad()
@@ -110,47 +116,51 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
         ll_test /= i
 
         end = timer()
-
-        logger.info("epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
-                    format(epoch, ll_tot, ll_test, model.DAGness(), end-start))
+        if umnn_maf:
+            logger.info(
+                "epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
+                format(epoch, ll_tot, ll_test, end - start))
+        else:
+            logger.info("epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
+                        format(epoch, ll_tot, ll_test, model.DAGness(), end-start))
         if epoch % 5 == 0:
-            # Plot DAG
-            # Plot DAG
-            font = {'family': 'normal',
-                    'weight': 'bold',
-                    'size': 12}
 
-            matplotlib.rc('font', **font)
-            A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
-            A_thresholded = A_normal * (A_normal > .001)
-            j = 0
-            for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
-                A /= A.sum() / np.log(dim)
-                ax = plt.subplot(2, 2, 1 + j)
-                plt.title(name + " DAG")
-                G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-                pos = nx.layout.spring_layout(G)
-                nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
-                edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-                nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
-                                       arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                       edge_cmap=plt.cm.Blues, width=5 * weights)
-                labels = {}
-                for i in range(dim):
-                    labels[i] = str(r'$%d$' % i)
-                nx.draw_networkx_labels(G, pos, labels, font_size=12)
+            if not umnn_maf:
+                # Plot DAG
+                font = {'family': 'normal',
+                        'weight': 'bold',
+                        'size': 12}
 
-                ax = plt.subplot(2, 2, 2 + j)
-                ax.matshow(np.log(A))
-                j += 2
+                matplotlib.rc('font', **font)
+                A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
+                A_thresholded = A_normal * (A_normal > .001)
+                j = 0
+                for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
+                    A /= A.sum() / np.log(dim)
+                    ax = plt.subplot(2, 2, 1 + j)
+                    plt.title(name + " DAG")
+                    G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
+                    pos = nx.layout.spring_layout(G)
+                    nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
+                    edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
+                    nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
+                                           arrowsize=3, connectionstyle='arc3,rad=0.2',
+                                           edge_cmap=plt.cm.Blues, width=5 * weights)
+                    labels = {}
+                    for i in range(dim):
+                        labels[i] = str(r'$%d$' % i)
+                    nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
-            # vf.plt_flow(model.compute_ll, ax)
-            plt.savefig("%s/DAG_%d.pdf" % (path, epoch))
+                    ax = plt.subplot(2, 2, 2 + j)
+                    ax.matshow(np.log(A))
+                    j += 2
+                    G.clear()
+                    plt.clf()
+
+                # vf.plt_flow(model.compute_ll, ax)
+                plt.savefig("%s/DAG_%d.pdf" % (path, epoch))
             torch.save(model.state_dict(), path + '/model.pt')
             torch.save(opt.state_dict(), path + '/ADAM.pt')
-            G.clear()
-            plt.clf()
-            print(A)
 
 import argparse
 datasets = ["power", "gas", "bsds300", "miniboone"]
@@ -164,6 +174,7 @@ parser.add_argument("-max_l1", default=1., type=float, help="Maximum weight for 
 parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
 parser.add_argument("-b_size", default=100, type=int, help="Batch size")
 parser.add_argument("-network", default=[100, 100, 100, 100], nargs="+", type=int, help="NN hidden layers")
+parser.add_argument("-UMNN_MAF", default=False, action="store_true", help="replace the DAG-NF by a UMNN-MAF")
 
 args = parser.parse_args()
 from datetime import datetime
@@ -179,4 +190,5 @@ for toy in toys:
     if not(os.path.isdir(path)):
         os.makedirs(path)
     train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, max_l1=args.max_l1,
-              nb_epoch=args.nb_epoch, network=args.network, b_size=args.b_size, all_args=args)
+              nb_epoch=args.nb_epoch, network=args.network, b_size=args.b_size, all_args=args,
+          umnn_maf=args.UMNN_MAF)
