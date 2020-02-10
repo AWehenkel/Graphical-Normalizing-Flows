@@ -24,7 +24,7 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=50, folder="", max_l1=1
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    emb_net = MLP(dim, hidden=[50, 50, 50], out_d=2, device=device)
+    emb_net = MLP(dim, hidden=[10, 10, 10], out_d=2, device=device)
     model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=2, emb_net=emb_net, device=device,
                   l1_weight=.01, nb_steps=nb_steps)
 
