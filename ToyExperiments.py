@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 
 
-def train_toy(toy, load=True, nb_step_dual=100, nb_steps=50, folder="", max_l1=1., nb_epoch=10000):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1., nb_epoch=10000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -25,7 +25,7 @@ def train_toy(toy, load=True, nb_step_dual=100, nb_steps=50, folder="", max_l1=1
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    emb_net = MLP(dim, hidden=[10, 10, 10], out_d=10, device=device)
+    emb_net = MLP(dim, hidden=[50, 50, 50], out_d=10, device=device)
     model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=10, emb_net=emb_net, device=device,
                   l1_weight=.01, nb_steps=nb_steps)
 
