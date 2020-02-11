@@ -133,7 +133,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
             logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                         format(epoch, ll_tot, ll_test, model.DAGness(), end-start))
 
-        if epoch % 10 == 0:
+        if epoch % 10 == 0 and not umnn_maf:
             for threshold in [.1, .01, .0001]:
                 model.dag_embedding.dag.h_threshold = threshold
                 # Valid loop
