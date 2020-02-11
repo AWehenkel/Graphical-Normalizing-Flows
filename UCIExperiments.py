@@ -1,4 +1,4 @@
-from models import DAGNF, MLP
+from models import DAGNF, MLP, MNISTCNN
 import torch
 from timeit import default_timer as timer
 import lib.utils as utils
@@ -41,8 +41,10 @@ def load_data(name):
 
     elif name == 'miniboone':
         return UCIdatasets.MINIBOONE()
+
     elif name == "digits":
         return UCIdatasets.DIGITS()
+
     else:
         raise ValueError('Unknown dataset')
 
@@ -71,6 +73,8 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                             embedding_s=emb_net[-1], nb_steps=nb_steps, device=device).to(device)
     else:
         if emb_net is not None:
+            if dataset == "mnist":
+                emb_net = MNISTCNN()
             emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
         model = DAGNF(in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_net=emb_net, device=device,
                       l1_weight=.01, nb_steps=nb_steps)
@@ -111,7 +115,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
 
         ll_tot /= i
 
-        # Testing loop
+        # Valid loop
         ll_test = 0.
         i = 0.
         for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
@@ -128,7 +132,22 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
         else:
             logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                         format(epoch, ll_tot, ll_test, model.DAGness(), end-start))
-        if epoch % 5 == 0:
+
+        if epoch % 10 == 0:
+            for threshold in [.1, .01, .0001]:
+                model.dag_embedding.dag.h_threshold = threshold
+                # Valid loop
+                ll_test = 0.
+                i = 0.
+                for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
+                    ll, _ = model.compute_ll(cur_x)
+                    ll_test += ll.mean().item()
+                    i += 1
+                ll_test /= i
+                logger.info("epoch: {:d} - Threshold: {:4f} - Valid loss: {:4f}".format(epoch, threshold, ll_test))
+            model.dag_embedding.dag.h_threshold = 0.
+
+        if epoch % nb_step_dual == 0:
 
             if not umnn_maf:
                 # Plot DAG
@@ -164,9 +183,11 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                 G.clear()
                 plt.clf()
 
+            torch.save(model.state_dict(), path + '_%d/model.pt' % nb_step_dual)
+            torch.save(opt.state_dict(), path + '_%d/ADAM.pt' % nb_step_dual)
 
-            torch.save(model.state_dict(), path + '/model.pt')
-            torch.save(opt.state_dict(), path + '/ADAM.pt')
+        torch.save(model.state_dict(), path + '/model.pt')
+        torch.save(opt.state_dict(), path + '/ADAM.pt')
 
 import argparse
 datasets = ["power", "gas", "bsds300", "miniboone", "hepmass", "digits"]

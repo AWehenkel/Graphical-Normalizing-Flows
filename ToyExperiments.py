@@ -10,6 +10,7 @@ import networkx as nx
 import numpy as np
 import matplotlib
 
+
 def train_toy(toy, load=True, nb_step_dual=100, nb_steps=50, folder="", max_l1=1., nb_epoch=10000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 

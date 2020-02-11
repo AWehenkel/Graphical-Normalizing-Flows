@@ -1,4 +1,6 @@
 import torch.nn as nn
+import torch
+import torch.nn.functional as F
 
 
 class MLP(nn.Module):
@@ -22,5 +24,31 @@ class MLP(nn.Module):
         self.net.to(device)
         self.device = device
         return self
+
+
+class MNISTCNN(nn.Module):
+    def __init__(self, out_d=10):
+        super(MNISTCNN, self).__init__()
+        self.conv1 = nn.Conv2d(1, 16, 3, 1)
+        self.conv2 = nn.Conv2d(16, 16, 3, 1)
+        self.dropout1 = nn.Dropout2d(0.25)
+        self.dropout2 = nn.Dropout2d(0.5)
+        self.fc1 = nn.Linear(2304, 128)
+        self.fc2 = nn.Linear(128, out_d)
+        self.out_d = out_d
+
+    def forward(self, x):
+        x = self.conv1(x.view(-1, 1, 28, 28))
+        x = F.relu(x)
+        x = self.conv2(x)
+        x = F.max_pool2d(x, 2)
+        x = self.dropout1(x)
+        x = torch.flatten(x, 1)
+        print(x.shape)
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.dropout2(x)
+        x = self.fc2(x)
+        return x
 
 

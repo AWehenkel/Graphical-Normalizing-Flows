@@ -11,12 +11,13 @@ class IdentityNN(nn.Module):
 
 
 class DAGNN(nn.Module):
-    def __init__(self, d, device="cpu", soft_thresholding=True, net=None):
+    def __init__(self, d, device="cpu", soft_thresholding=True, h_thresh=0., net=None):
         super().__init__()
         self.A = nn.Parameter(torch.randn(d, d, device=device)*.1 + .5)
         self.d = d
         self.device = device
         self.s_thresh = soft_thresholding
+        self.h_thresh = h_thresh
         self.net = net if net is not None else IdentityNN()
 
     def to(self, device):
@@ -27,8 +28,14 @@ class DAGNN(nn.Module):
     def soft_thresholded_A(self):
         return 2*(torch.sigmoid(2*(self.A**2)) -.5)
 
+    def hard_thresholded_A(self):
+        return torch.relu(self.soft_thresholded_A() - self.h_thresh)
+
     def forward(self, x):
-        if self.s_thresh:
+        if self.h_thresh > 0:
+            e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.hard_thresholded_A().unsqueeze(0)
+                 .expand(x.shape[0], -1, -1)).view(x.shape[0] * self.d, -1)
+        elif self.s_thresh:
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.soft_thresholded_A().unsqueeze(0)
                  .expand(x.shape[0], -1, -1)).view(x.shape[0]*self.d, -1)
         else:

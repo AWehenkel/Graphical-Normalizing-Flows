@@ -1,3 +1,3 @@
 from .DAGNN import DAGNF
-from .MLP import MLP
+from .MLP import MLP, MNISTCNN
 
