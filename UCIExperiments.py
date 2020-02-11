@@ -144,7 +144,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                     ll_test += ll.mean().item()
                     i += 1
                 ll_test /= i
-                logger.info("epoch: {:d} - Threshold: {:4f} - Valid loss: {:4f} - <<DAGness>>: {:4f}".
+                logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
                             format(epoch, threshold, ll_test, model.DAGness()))
             model.dag_embedding.dag.h_threshold = 0.
 
