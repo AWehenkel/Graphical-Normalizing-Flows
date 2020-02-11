@@ -184,8 +184,8 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                 G.clear()
                 plt.clf()
 
-            torch.save(model.state_dict(), path + '/model_%d.pt' % nb_step_dual)
-            torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % nb_step_dual)
+            torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
+            torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % epoch)
 
         torch.save(model.state_dict(), path + '/model.pt')
         torch.save(opt.state_dict(), path + '/ADAM.pt')

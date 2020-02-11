@@ -29,7 +29,9 @@ class DAGNN(nn.Module):
         return 2*(torch.sigmoid(2*(self.A**2)) -.5)
 
     def hard_thresholded_A(self):
-        return torch.relu(self.soft_thresholded_A() - self.h_thresh)
+        if self.s_thresh:
+            return torch.relu(self.soft_thresholded_A() - self.h_thresh)
+        return torch.relu(self.A**2 - self.h_thresh)
 
     def forward(self, x):
         if self.h_thresh > 0:
