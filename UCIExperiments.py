@@ -83,9 +83,9 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
 
     if load:
         logger.info("Loading model...")
-        model.load_state_dict(torch.load(path + '/model.pt', map_location={"cuda:0" : device}))
+        model.load_state_dict(torch.load(path + '/model.pt', map_location={"cuda:0": device}))
         model.train()
-        opt.load_state_dict(torch.load(path + '/ADAM.pt', map_location={"cuda:0" : device}))
+        opt.load_state_dict(torch.load(path + '/ADAM.pt', map_location={"cuda:0": device}))
         logger.info("Model loaded.")
         with torch.no_grad():
             model.dag_embedding.dag.h_threshold = .001
