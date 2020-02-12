@@ -26,7 +26,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1
 
     dim = x.shape[1]
     emb_net = None#MLP(dim, hidden=[20, 20, 20], out_d=16, device=device)
-    model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=16, emb_net=emb_net, device=device,
+    model = DAGNF(in_d=dim, hidden_integrand=[150, 150, 150, 150], emb_d=16, emb_net=emb_net, device=device,
                   l1_weight=.01, nb_steps=nb_steps)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
