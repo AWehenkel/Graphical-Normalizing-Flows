@@ -48,9 +48,9 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1
             opt.zero_grad()
             loss.backward(retain_graph=True)
             opt.step()
-        if epoch % 1 == 0 and False:
+        if epoch % 1 == 0:
             with torch.no_grad():
-                model.dag_embedding.dag.constrainA()
+                model.dag_embedding.dag.constrainA(zero_threshold=0.)
 
         if epoch % nb_step_dual == 0 and epoch != 0:
             model.update_dual_param()
