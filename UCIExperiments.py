@@ -83,10 +83,55 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
 
     if load:
         logger.info("Loading model...")
-        model.load_state_dict(torch.load(path + '/model.pt'))
+        model.load_state_dict(torch.load(path + '/model.pt', map_location={"cuda:0" : device}))
         model.train()
-        opt.load_state_dict(torch.load(path + '/ADAM.pt'))
+        opt.load_state_dict(torch.load(path + '/ADAM.pt', map_location={"cuda:0" : device}))
         logger.info("Model loaded.")
+        with torch.no_grad():
+            model.dag_embedding.dag.h_threshold = .001
+            font = {'family': 'normal',
+                    'weight': 'bold',
+                    'size': 12}
+            matplotlib.rc('font', **font)
+            A_normal = model.dag_embedding.dag.hard_thresholded_A().detach().cpu().numpy().T
+            A_thresholded = A_normal * (A_normal > .001)
+            j = 0
+            for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
+                A /= A.sum() / np.log(dim)
+                ax = plt.subplot(2, 2, 1 + j)
+                plt.title(name + " DAG")
+                G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
+                pos = nx.layout.spring_layout(G)
+                nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
+                edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
+                nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
+                                       arrowsize=3, connectionstyle='arc3,rad=0.2',
+                                       edge_cmap=plt.cm.Blues, width=5 * weights)
+                labels = {}
+                for i in range(dim):
+                    labels[i] = str(r'$%d$' % i)
+                nx.draw_networkx_labels(G, pos, labels, font_size=12)
+
+                ax = plt.subplot(2, 2, 2 + j)
+                ax.matshow(np.log(A))
+                j += 2
+                # vf.plt_flow(model.compute_ll, ax)
+            plt.savefig("%s/DAG_loaded.pdf" % (path))
+            G.clear()
+            plt.clf()
+        print(model.dag_embedding.dag.A)
+        # Valid loop
+        ll_test = 0.
+        i = 0.
+        model.dag_embedding.dag.h_thresh = .00001
+
+        for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
+            ll, _ = model.compute_ll(cur_x)
+            ll_test += ll.mean().item()
+            i += 1
+            logger.info(ll_test/i)
+        ll_test /= i
+        return
 
     for epoch in range(nb_epoch):
         ll_tot = 0
@@ -135,7 +180,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
 
         if epoch % 10 == 0 and not umnn_maf:
             for threshold in [.1, .01, .0001]:
-                model.dag_embedding.dag.h_threshold = threshold
+                model.dag_embedding.dag.h_thresh = threshold
                 # Valid loop
                 ll_test = 0.
                 i = 0.

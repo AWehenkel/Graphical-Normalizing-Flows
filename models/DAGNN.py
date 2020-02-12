@@ -29,15 +29,18 @@ class DAGNN(nn.Module):
         return 2*(torch.sigmoid(2*(self.A**2)) -.5)
 
     def hard_thresholded_A(self):
+        print("ici")
         if self.s_thresh:
             return torch.relu(self.soft_thresholded_A() - self.h_thresh)
         return torch.relu(self.A**2 - self.h_thresh)
 
     def forward(self, x):
         if self.h_thresh > 0:
+            print("là %f" % self.h_thresh, flush=True)
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.hard_thresholded_A().unsqueeze(0)
                  .expand(x.shape[0], -1, -1)).view(x.shape[0] * self.d, -1)
         elif self.s_thresh:
+            print("là2 %f" % self.h_thresh, flush=True)
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.soft_thresholded_A().unsqueeze(0)
                  .expand(x.shape[0], -1, -1)).view(x.shape[0]*self.d, -1)
         else:
