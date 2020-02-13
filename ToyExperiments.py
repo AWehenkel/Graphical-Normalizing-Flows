@@ -1,5 +1,5 @@
 import lib.toy_data as toy_data
-from models import DAGNF, MLP
+from models import DAGNF, MLP, LinearFlow
 import torch
 from timeit import default_timer as timer
 import lib.utils as utils
@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 
 
-def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1., nb_epoch=10000):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1., nb_epoch=50000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -25,9 +25,14 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    emb_net = MLP(dim, hidden=[50, 50, 50], out_d=20, device=device)
-    model = DAGNF(in_d=dim, hidden_integrand=[100, 100, 100], emb_d=20, emb_net=emb_net, device=device,
-                  l1_weight=.01, nb_steps=nb_steps)
+    linear_net = False
+    emb_net = None#MLP(dim, hidden=[100, 100, 100], out_d=20, device=device)
+    if linear_net:
+        linear_net = MLP(in_d=20, hidden=[100, 100, 100], out_d=2, device=device)
+        model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=.01)
+    else:
+        model = DAGNF(in_d=dim, hidden_integrand=[150, 150, 150, 150], emb_d=20, emb_net=emb_net, device=device,
+                      l1_weight=.01, nb_steps=nb_steps)
 
     #opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
     opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
@@ -51,7 +56,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1
             opt.step()
         if epoch % 1 == 0:
             with torch.no_grad():
-                model.dag_embedding.dag.constrainA(zero_threshold=0.)
+                model.constrainA(zero_threshold=0.)
 
         if epoch % nb_step_dual == 0 and epoch != 0:
             model.update_dual_param()
@@ -82,11 +87,13 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1
                     'size': 12}
 
             matplotlib.rc('font', **font)
-            A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
-            A_thresholded = A_normal * (A_normal > .001)
+            A_normal = model.getDag().soft_thresholded_A().detach().cpu().numpy().T
+            A_thresholded = A_normal#A_normal * (A_normal > .001)
             j = 0
             for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
+                print(A)
                 A /= A.sum() / np.log(dim)
+
                 ax = plt.subplot(2, 2, 1 + j)
                 plt.title(name + " DAG")
                 G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
@@ -126,7 +133,7 @@ parser.add_argument("-load", default=False, action="store_true", help="Load a mo
 parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=50, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
 parser.add_argument("-max_l1", default=1., type=float, help="Maximum weight for l1 regularization")
-parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
+parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs")
 
 args = parser.parse_args()
 

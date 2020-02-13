@@ -19,6 +19,8 @@ class DAGNN(nn.Module):
         self.s_thresh = soft_thresholding
         self.h_thresh = h_thresh
         self.net = net if net is not None else IdentityNN()
+        with torch.no_grad():
+            self.constrainA(h_thresh)
 
     def to(self, device):
         self.A = self.A.to(device)
@@ -131,6 +133,12 @@ class DAGNF(nn.Module):
         lag_const = self.dag_embedding.dag.get_power_trace(self.c/self.d)
         loss = self.lambd*lag_const + self.c/2*lag_const**2 - ll.mean() + self.l1_weight*self.dag_embedding.dag.A.abs().mean()
         return loss
+
+    def constrainA(self, zero_threshold):
+        self.dag_embedding.dag.constrainA(zero_threshold=zero_threshold)
+
+    def getDag(self):
+        return self.dag_embedding.dag
 
     def update_dual_param(self):
         with torch.no_grad():
