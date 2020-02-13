@@ -18,6 +18,7 @@ class DAGNN(nn.Module):
         self.device = device
         self.s_thresh = soft_thresholding
         self.h_thresh = h_thresh
+        self.stoch_gate = True
         self.net = net if net is not None else IdentityNN()
         with torch.no_grad():
             self.constrainA(h_thresh)
@@ -26,6 +27,15 @@ class DAGNN(nn.Module):
         self.A = self.A.to(device)
         self.device = device
         return self
+
+    def stochastic_gate(self, importance):
+        beta_1, beta_2 = 3., 10.
+        sigma = beta_1/(1 + torch.sqrt((importance - .5)**2))
+        mu = importance
+        z = torch.randn(importance.shape) * sigma + mu
+        non_importance = torch.sqrt((importance - 1.)**2)
+        z = z - non_importance
+        return torch.relu(z.clamp_max(1.))
 
     def soft_thresholded_A(self):
         return 2*(torch.sigmoid(2*(self.A**2)) -.5)
@@ -40,8 +50,12 @@ class DAGNN(nn.Module):
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.hard_thresholded_A().unsqueeze(0)
                  .expand(x.shape[0], -1, -1)).view(x.shape[0] * self.d, -1)
         elif self.s_thresh:
-            e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.soft_thresholded_A().unsqueeze(0)
-                 .expand(x.shape[0], -1, -1)).view(x.shape[0]*self.d, -1)
+            if self.stoch_gate:
+                e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.stochastic_gate(self.soft_thresholded_A().unsqueeze(0)
+                     .expand(x.shape[0], -1, -1))).view(x.shape[0] * self.d, -1)
+            else:
+                e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.soft_thresholded_A().unsqueeze(0)
+                     .expand(x.shape[0], -1, -1)).view(x.shape[0]*self.d, -1)
         else:
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))\
                 .view(x.shape[0]*self.d, -1)
