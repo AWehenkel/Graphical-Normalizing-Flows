@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 
 
-def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1., nb_epoch=50000):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1., nb_epoch=50000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -26,12 +26,12 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1
 
     dim = x.shape[1]
     linear_net = False
-    emb_net = None#MLP(dim, hidden=[100, 100, 100], out_d=20, device=device)
+    emb_net = MLP(dim, hidden=[50, 50, 50], out_d=20, device=device)
     if linear_net:
         linear_net = MLP(in_d=20, hidden=[100, 100, 100], out_d=2, device=device)
         model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=.01)
     else:
-        model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
+        model = DAGNF(in_d=dim, hidden_integrand=[100, 100, 100], emb_d=20, emb_net=emb_net, device=device,
                       l1_weight=.01, nb_steps=nb_steps)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
@@ -47,6 +47,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1
     for epoch in range(nb_epoch):
         ll_tot = 0
         start = timer()
+        model.getDag().stoch_gate = True
         for j in range(0, nb_samp, batch_size):
             cur_x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=batch_size)).to(device)
             loss = model.loss(cur_x)
@@ -64,6 +65,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=50, folder="", max_l1=1
                 model.l1_weight = model.l1_weight*1.4
 
         end = timer()
+        model.getDag().stoch_gate = False
         ll_test, _ = model.compute_ll(x_test)
         ll_test = -ll_test.mean()
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
@@ -132,7 +134,7 @@ parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy 
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=50, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
-parser.add_argument("-max_l1", default=1., type=float, help="Maximum weight for l1 regularization")
+parser.add_argument("-max_l1", default=.1, type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs")
 
 args = parser.parse_args()

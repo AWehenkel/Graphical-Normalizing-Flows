@@ -13,7 +13,7 @@ class IdentityNN(nn.Module):
 class DAGNN(nn.Module):
     def __init__(self, d, device="cpu", soft_thresholding=True, h_thresh=0., net=None):
         super().__init__()
-        self.A = nn.Parameter(torch.randn(d, d, device=device)*.1 + .5)
+        self.A = nn.Parameter(torch.ones(d, d, device=device)*.5)
         self.d = d
         self.device = device
         self.s_thresh = soft_thresholding
@@ -34,7 +34,7 @@ class DAGNN(nn.Module):
         mu = importance
         z = torch.randn(importance.shape, device=self.device) * sigma + mu
         non_importance = torch.sqrt((importance - 1.)**2)
-        z = z - non_importance
+        z = z - non_importance/beta_1
         return torch.relu(z.clamp_max(1.))
 
     def soft_thresholded_A(self):
