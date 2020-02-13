@@ -32,7 +32,7 @@ class DAGNN(nn.Module):
         beta_1, beta_2 = 3., 10.
         sigma = beta_1/(1 + torch.sqrt((importance - .5)**2))
         mu = importance
-        z = torch.randn(importance.shape) * sigma + mu
+        z = torch.randn(importance.shape, device=self.device) * sigma + mu
         non_importance = torch.sqrt((importance - 1.)**2)
         z = z - non_importance
         return torch.relu(z.clamp_max(1.))
