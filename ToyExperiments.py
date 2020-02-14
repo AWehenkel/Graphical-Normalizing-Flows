@@ -112,7 +112,8 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
                 nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
                 ax = plt.subplot(2, 2, 2 + j)
-                ax.matshow(np.log(A))
+                out = ax.matshow(np.log(A))
+                plt.colorbar(out, ax=ax)
                 j += 2
 
             #vf.plt_flow(model.compute_ll, ax)
