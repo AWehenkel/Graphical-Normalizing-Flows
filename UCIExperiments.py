@@ -149,6 +149,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
 
         i = 0
         # Training loop
+        model.getDag().stoch_gate = True
         for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
             loss = model.loss(cur_x) if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
             print(loss.item())
@@ -161,6 +162,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
         ll_tot /= i
 
         # Valid loop
+        model.getDag().stoch_gate = False
         ll_test = 0.
         i = 0.
         for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
