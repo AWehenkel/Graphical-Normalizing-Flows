@@ -95,7 +95,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
             j = 0
             for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
                 print(A)
-                A /= A.sum() / np.log(dim)
+                #A /= A.sum() / np.log(dim)
 
                 ax = plt.subplot(2, 2, 1 + j)
                 plt.title(name + " DAG")
