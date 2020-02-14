@@ -28,10 +28,10 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
     linear_net = False
     emb_net = MLP(dim, hidden=[100, 100, 100], out_d=20, device=device)
     if linear_net:
-        linear_net = MLP(in_d=20, hidden=[100, 100, 100], out_d=2, device=device)
+        linear_net = MLP(in_d=20, hidden=[100, 100, 100, 100], out_d=2, device=device)
         model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=.01)
     else:
-        model = DAGNF(in_d=dim, hidden_integrand=[100, 100, 100, 100], emb_d=20, emb_net=emb_net, device=device,
+        model = DAGNF(in_d=dim, hidden_integrand=[150, 150, 150, 150], emb_d=20, emb_net=emb_net, device=device,
                       l1_weight=.01, nb_steps=nb_steps)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
@@ -90,8 +90,8 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
 
             matplotlib.rc('font', **font)
             A_normal = model.getDag().soft_thresholded_A().detach().cpu().numpy().T
-            print(A_normal)
-            A_thresholded = A_normal#A_normal * (A_normal > .001)
+            logger.info(str(A_normal))
+            A_thresholded = A_normal * (A_normal > .001)
             j = 0
             for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
                 print(A)
