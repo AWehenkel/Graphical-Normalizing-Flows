@@ -225,7 +225,8 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                     nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
                     ax = plt.subplot(2, 2, 2 + j)
-                    ax.matshow(np.log(A))
+                    out = ax.matshow(np.log(A))
+                    plt.colorbar(out, ax=ax)
                     j += 2
                     # vf.plt_flow(model.compute_ll, ax)
                 plt.savefig("%s/DAG_%d.pdf" % (path, epoch))
