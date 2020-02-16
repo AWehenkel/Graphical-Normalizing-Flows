@@ -30,7 +30,7 @@ class DAGNN(nn.Module):
 
     def stochastic_gate(self, importance):
         beta_1, beta_2 = 3., 10.
-        sigma = beta_1/(1 + torch.sqrt((importance - .5)**2))
+        sigma = beta_1/(1. + torch.sqrt((importance - .5)**2.))
         mu = importance
         z = torch.randn(importance.shape, device=self.device) * sigma + mu
         non_importance = torch.sqrt((importance - 1.)**2)
@@ -119,7 +119,7 @@ class DAGNF(nn.Module):
         self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device)
         self.UMNN = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, device=device, solver=solver)
         self.lambd = .5
-        self.c = .5
+        self.c = .1
         self.eta = 2
         self.gamma = .5
         self.d = in_d
