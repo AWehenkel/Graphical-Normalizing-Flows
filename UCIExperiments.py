@@ -76,6 +76,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
             if dataset == "mnist":
                 emb_net = MNISTCNN()
             emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
+        l1_weight = .01 if 0.01 > max_l1 else max_l1/10.
         model = DAGNF(in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_net=emb_net, device=device,
                       l1_weight=.01, nb_steps=nb_steps)
 
@@ -206,6 +207,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
 
                 matplotlib.rc('font', **font)
                 A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
+                logger.info(str(A_normal))
                 A_thresholded = A_normal * (A_normal > .001)
                 j = 0
                 for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
