@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 
 
-def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=1000):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=100):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -26,12 +26,12 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., n
 
     dim = x.shape[1]
     linear_net = False
-    emb_net = MLP(dim, hidden=[100, 100, 100, 100], out_d=20, device=device)
+    emb_net = MLP(dim, hidden=[50, 50, 50], out_d=20, device=device)
     if linear_net:
         linear_net = MLP(in_d=20, hidden=[100, 100, 100, 100], out_d=2, device=device)
         model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=.01)
     else:
-        model = DAGNF(in_d=dim, hidden_integrand=[100, 100, 100, 100], emb_d=20, emb_net=emb_net, device=device,
+        model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
                       l1_weight=l1, nb_steps=nb_steps)
     model.dag_const = 0.
     #opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
@@ -68,7 +68,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., n
         ll_test = -ll_test.mean()
         dagness = model.DAGness()
         if dagness < 1. and epoch > pre_heating_epochs:
-            model.l1_weight = .01
+            model.l1_weight = .1
             model.dag_const = 1.
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test.item(), model.DAGness(), end-start))

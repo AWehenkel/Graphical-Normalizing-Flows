@@ -39,13 +39,24 @@ class DAGNN(nn.Module):
         self.A.requires_grad = False
 
     def stochastic_gate(self, importance):
-        beta_1, beta_2 = 3., 10.
-        sigma = beta_1/(1. + beta_2*torch.sqrt((importance - .5)**2.))
-        mu = importance
-        z = torch.randn(importance.shape, device=self.device) * sigma + mu + .25
-        #non_importance = torch.sqrt((importance - 1.)**2)
-        #z = z - non_importance/beta_1
-        return torch.relu(z.clamp_max(1.))
+        if True:
+            # Gumble soft-max gate
+            temp = 1.
+            epsilon = 1e-10
+            g1 = -torch.log(-torch.log(torch.rand(importance.shape)))
+            g2 = -torch.log(-torch.log(torch.rand(importance.shape)))
+            z1 = torch.exp((torch.log(importance + epsilon) + g1)/temp)
+            z2 = torch.exp((torch.log(1 - importance - epsilon) + g2)/temp)
+            return z2 / (z1 + z2)
+
+        else:
+            beta_1, beta_2 = 3., 10.
+            sigma = beta_1/(1. + beta_2*torch.sqrt((importance - .5)**2.))
+            mu = importance
+            z = torch.randn(importance.shape, device=self.device) * sigma + mu + .25
+            #non_importance = torch.sqrt((importance - 1.)**2)
+            #z = z - non_importance/beta_1
+            return torch.relu(z.clamp_max(1.))
 
     def noiser_gate(self, x, importance):
         noise = torch.randn(importance.shape, device=self.device) * torch.sqrt((1 - importance)**2)
