@@ -42,12 +42,12 @@ class DAGNN(nn.Module):
         if True:
             # Gumble soft-max gate
             temp = 1.
-            epsilon = 1e-10
+            epsilon = .5
             g1 = -torch.log(-torch.log(torch.rand(importance.shape)))
             g2 = -torch.log(-torch.log(torch.rand(importance.shape)))
-            z1 = torch.exp((torch.log(importance + epsilon) + g1)/temp)
-            z2 = torch.exp((torch.log(1 - importance - epsilon) + g2)/temp)
-            return z2 / (z1 + z2)
+            z1 = torch.exp((torch.log(importance*.5 + epsilon) + g1)/temp)
+            z2 = torch.exp((torch.log(1 - importance*.5 - epsilon) + g2)/temp)
+            return z1 / (z1 + z2)
 
         else:
             beta_1, beta_2 = 3., 10.

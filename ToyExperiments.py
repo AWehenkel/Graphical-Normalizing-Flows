@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 
 
-def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=100):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=1000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -29,7 +29,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., n
     emb_net = MLP(dim, hidden=[50, 50, 50], out_d=20, device=device)
     if linear_net:
         linear_net = MLP(in_d=20, hidden=[100, 100, 100, 100], out_d=2, device=device)
-        model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=.01)
+        model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=l1)
     else:
         model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
                       l1_weight=l1, nb_steps=nb_steps)
