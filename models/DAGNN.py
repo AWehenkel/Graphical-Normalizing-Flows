@@ -13,7 +13,7 @@ class IdentityNN(nn.Module):
 class DAGNN(nn.Module):
     def __init__(self, d, device="cpu", soft_thresholding=True, h_thresh=0., net=None):
         super().__init__()
-        self.A = nn.Parameter(torch.ones(d, d, device=device)*.5)
+        self.A = nn.Parameter(torch.ones(d, d, device=device)*1.5 + torch.randn((d, d), device=device)*.02)
         self.d = d
         self.device = device
         self.s_thresh = soft_thresholding
@@ -28,6 +28,15 @@ class DAGNN(nn.Module):
         self.A = self.A.to(device)
         self.device = device
         return self
+
+    def post_process(self, zero_threshold):
+        self.stoch_gate = False
+        self.noise_gate = False
+        self.s_thresh = False
+        self.A *= (self.soft_thresholded_A().clone().abs() > zero_threshold).float()
+        self.A *= 1. - torch.eye(self.d, device=self.device)
+        self.A /= self.A * (self.A > 0.).float() + (self.A == 0).float()
+        self.A.requires_grad = False
 
     def stochastic_gate(self, importance):
         beta_1, beta_2 = 3., 10.
@@ -127,14 +136,15 @@ class DAGNF(nn.Module):
         super().__init__()
         self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device)
         self.UMNN = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, device=device, solver=solver)
-        self.lambd = .5
-        self.c = .1
-        self.eta = 2
-        self.gamma = .5
+        self.lambd = .0
+        self.c = 1e-3
+        self.eta = 10
+        self.gamma = .9
         self.d = in_d
         self.prev_trace = self.dag_embedding.dag.get_power_trace(self.c / self.d)
-        self.tol = 1e-4
+        self.tol = 1e-8
         self.l1_weight = l1_weight
+        self.dag_const = 1.
 
     def to(self, device):
         self.dag_embedding.to(device)
@@ -153,8 +163,9 @@ class DAGNF(nn.Module):
 
     def loss(self, x):
         ll, _ = self.UMNN.compute_ll(x)
-        lag_const = self.dag_embedding.dag.get_power_trace(self.c/self.d)
-        loss = self.lambd*lag_const + self.c/2*lag_const**2 - ll.mean() + self.l1_weight*self.dag_embedding.dag.A.abs().mean()
+        alpha = 1.#self.c/self.d
+        lag_const = self.dag_embedding.dag.get_power_trace(alpha)
+        loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) - ll.mean() + self.l1_weight*self.dag_embedding.dag.A.abs().mean()
         return loss
 
     def constrainA(self, zero_threshold):
@@ -165,12 +176,16 @@ class DAGNF(nn.Module):
 
     def update_dual_param(self):
         with torch.no_grad():
-            lag_const = self.dag_embedding.dag.get_power_trace(self.c / self.d)
-            if lag_const > self.tol:
+            alpha = 1.#self.c / self.d
+            lag_const = self.dag_embedding.dag.get_power_trace(alpha)
+            if self.dag_const > 0. and lag_const > self.tol:
                 self.lambd = self.lambd + self.c * lag_const
                 # Absolute does not make sense (but copied from DAG-GNN)
                 if lag_const.abs() > self.gamma*self.prev_trace.abs():
                     self.c *= self.eta
                 self.prev_trace = lag_const
+            else:
+                self.dag_embedding.dag.post_process(1e-4)
+                self.dag_const = 0.
         return lag_const
 

@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 
 
-def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1., nb_epoch=50000):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1., nb_epoch=50000, pre_heating_epochs=1000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -26,14 +26,14 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
 
     dim = x.shape[1]
     linear_net = False
-    emb_net = MLP(dim, hidden=[150, 150, 150], out_d=20, device=device)
+    emb_net = MLP(dim, hidden=[100, 100, 100], out_d=20, device=device)
     if linear_net:
         linear_net = MLP(in_d=20, hidden=[100, 100, 100, 100], out_d=2, device=device)
         model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=.01)
     else:
-        model = DAGNF(in_d=dim, hidden_integrand=[150, 150, 150, 150], emb_d=20, emb_net=emb_net, device=device,
-                      l1_weight=.01, nb_steps=nb_steps)
-
+        model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
+                      l1_weight=.5, nb_steps=nb_steps)
+    model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
     #opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
 
@@ -47,8 +47,8 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
     for epoch in range(nb_epoch):
         ll_tot = 0
         start = timer()
-        model.getDag().stoch_gate = False
-        model.getDag().noise_gate = True
+        model.getDag().stoch_gate = True
+        model.getDag().noise_gate = False
         for j in range(0, nb_samp, batch_size):
             cur_x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=batch_size)).to(device)
             loss = model.loss(cur_x)
@@ -60,7 +60,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
             with torch.no_grad():
                 model.constrainA(zero_threshold=0.)
 
-        if epoch % nb_step_dual == 0 and epoch != 0:
+        if epoch % nb_step_dual == 0 and epoch > pre_heating_epochs:
             model.update_dual_param()
             if model.l1_weight < max_l1:
                 model.l1_weight = model.l1_weight*1.4
@@ -69,6 +69,10 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
         model.getDag().stoch_gate = False
         ll_test, _ = model.compute_ll(x_test)
         ll_test = -ll_test.mean()
+        dagness = model.DAGness()
+        if dagness < 1e-4 and epoch > pre_heating_epochs:
+            model.l1_weight = .01
+            model.dag_const = 1.
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test.item(), model.DAGness(), end-start))
         if epoch % 100 == 0:
