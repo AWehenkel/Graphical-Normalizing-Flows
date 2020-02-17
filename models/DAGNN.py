@@ -159,13 +159,15 @@ class DAGNF(nn.Module):
         return self.UMNN.compute_ll(x)
 
     def DAGness(self):
-        return self.dag_embedding.dag.get_power_trace(self.c / self.d)
+        alpha = .1 / self.d
+        return self.dag_embedding.dag.get_power_trace(alpha)
 
     def loss(self, x):
         ll, _ = self.UMNN.compute_ll(x)
-        alpha = 1.#self.c/self.d
+        alpha = .1/self.d
         lag_const = self.dag_embedding.dag.get_power_trace(alpha)
-        loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) - ll.mean() + self.l1_weight*self.dag_embedding.dag.A.abs().mean()
+        loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) - ll.mean() + \
+               self.l1_weight*self.dag_embedding.dag.A.abs().mean()
         return loss
 
     def constrainA(self, zero_threshold):
@@ -176,7 +178,7 @@ class DAGNF(nn.Module):
 
     def update_dual_param(self):
         with torch.no_grad():
-            alpha = 1.#self.c / self.d
+            alpha = 1./self.d#self.c / self.d
             lag_const = self.dag_embedding.dag.get_power_trace(alpha)
             if self.dag_const > 0. and lag_const > self.tol:
                 self.lambd = self.lambd + self.c * lag_const
@@ -184,7 +186,7 @@ class DAGNF(nn.Module):
                 if lag_const.abs() > self.gamma*self.prev_trace.abs():
                     self.c *= self.eta
                 self.prev_trace = lag_const
-            else:
+            elif self.dag_const > 0:
                 self.dag_embedding.dag.post_process(1e-4)
                 self.dag_const = 0.
         return lag_const

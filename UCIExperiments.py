@@ -49,8 +49,9 @@ def load_data(name):
         raise ValueError('Unknown dataset')
 
 
-def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", max_l1=1., nb_epoch=10000,
-          int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, all_args=None):
+def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000,
+          int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, min_pre_heating_epochs=30,
+          all_args=None):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -76,12 +77,16 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
             if dataset == "mnist":
                 emb_net = MNISTCNN()
             emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
-        l1_weight = .01 if 0.01 > max_l1 else max_l1/10.
+        l1_weight = l1
         model = DAGNF(in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_net=emb_net, device=device,
                       l1_weight=.01, nb_steps=nb_steps)
 
-    opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
+    model.dag_const = 0.
+    # opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
+    opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
 
+    model.getDag().stoch_gate = True
+    model.getDag().noise_gate = False
     if load:
         logger.info("Loading model...")
         model.load_state_dict(torch.load(path + '/model.pt', map_location={"cuda:0": device}))
@@ -144,14 +149,11 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
             with torch.no_grad():
                 model.dag_embedding.dag.constrainA(zero_threshold=0.)
 
-        if epoch % nb_step_dual == 0 and epoch != 0 and not umnn_maf:
+        if epoch % nb_step_dual == 0 and epoch != 0 and not umnn_maf and epoch > min_pre_heating_epochs:
             model.update_dual_param()
-            if model.l1_weight < max_l1:
-                model.l1_weight = model.l1_weight * 1.4
 
         i = 0
         # Training loop
-        model.getDag().stoch_gate = True
         for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
             loss = model.loss(cur_x) if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
             print(loss.item())
@@ -164,7 +166,6 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
         ll_tot /= i
 
         # Valid loop
-        model.getDag().stoch_gate = False
         ll_test = 0.
         i = 0.
         for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
@@ -179,8 +180,12 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", ma
                 "epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                 format(epoch, ll_tot, ll_test, end - start))
         else:
+            dagness = model.DAGness()
+            if dagness < 1e-4 and epoch > min_pre_heating_epochs:
+                model.l1_weight = .01
+                model.dag_const = 1.
             logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
-                        format(epoch, ll_tot, ll_test, model.DAGness(), end-start))
+                        format(epoch, ll_tot, ll_test, dagness, end-start))
 
         if epoch % 10 == 0 and not umnn_maf:
             for threshold in [.1, .01, .0001, 1e-8]:
@@ -249,7 +254,7 @@ parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy 
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=100, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
-parser.add_argument("-max_l1", default=1., type=float, help="Maximum weight for l1 regularization")
+parser.add_argument("-l1", default=.2, type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
 parser.add_argument("-b_size", default=100, type=int, help="Batch size")
 parser.add_argument("-int_net", default=[100, 100, 100, 100], nargs="+", type=int, help="NN hidden layers of UMNN")
@@ -271,6 +276,6 @@ for toy in toys:
     path = toy + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
     if not(os.path.isdir(path)):
         os.makedirs(path)
-    train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, max_l1=args.max_l1, nb_epoch=args.nb_epoch,
+    train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
           int_net=args.int_net, emb_net=args.emb_net, b_size=args.b_size, all_args=args, umnn_maf=args.UMNN_MAF,
           nb_steps=args.nb_steps)
