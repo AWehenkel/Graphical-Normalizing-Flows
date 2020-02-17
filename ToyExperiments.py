@@ -48,7 +48,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
         ll_tot = 0
         start = timer()
         model.getDag().stoch_gate = False
-        model.getDag().noiser_gate = True
+        model.getDag().noise_gate = True
         for j in range(0, nb_samp, batch_size):
             cur_x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=batch_size)).to(device)
             loss = model.loss(cur_x)
