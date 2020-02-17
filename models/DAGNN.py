@@ -19,6 +19,7 @@ class DAGNN(nn.Module):
         self.s_thresh = soft_thresholding
         self.h_thresh = h_thresh
         self.stoch_gate = True
+        self.noiser_gate = False
         self.net = net if net is not None else IdentityNN()
         with torch.no_grad():
             self.constrainA(h_thresh)
@@ -37,6 +38,10 @@ class DAGNN(nn.Module):
         z = z - non_importance/beta_1
         return torch.relu(z.clamp_max(1.))
 
+    def noiser_gate(self, x, importance):
+        noise = torch.randn(importance.shape, device=self.device) * torch.sqrt((1 - importance)**2)
+        return importance*(x + noise)
+
     def soft_thresholded_A(self):
         return 2*(torch.sigmoid(2*(self.A**2)) -.5)
 
@@ -53,6 +58,10 @@ class DAGNN(nn.Module):
             if self.stoch_gate:
                 e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.stochastic_gate(self.soft_thresholded_A().unsqueeze(0)
                      .expand(x.shape[0], -1, -1))).view(x.shape[0] * self.d, -1)
+            elif self.noiser_gate:
+                e = self.noiser_gate(x.unsqueeze(1).expand(-1, self.d, -1),
+                                     self.soft_thresholded_A().unsqueeze(0).expand(x.shape[0], -1, -1))\
+                    .view(x.shape[0] * self.d, -1)
             else:
                 e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.soft_thresholded_A().unsqueeze(0)
                      .expand(x.shape[0], -1, -1)).view(x.shape[0]*self.d, -1)
