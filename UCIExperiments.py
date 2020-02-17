@@ -181,9 +181,10 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 format(epoch, ll_tot, ll_test, end - start))
         else:
             dagness = model.DAGness()
-            if dagness < 1e-4 and epoch > min_pre_heating_epochs:
+            if dagness < 1. and epoch > min_pre_heating_epochs:
                 model.l1_weight = .01
                 model.dag_const = 1.
+                logger.info("Dagness constraint set on.")
             logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                         format(epoch, ll_tot, ll_test, dagness, end-start))
 

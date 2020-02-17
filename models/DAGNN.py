@@ -40,11 +40,11 @@ class DAGNN(nn.Module):
 
     def stochastic_gate(self, importance):
         beta_1, beta_2 = 3., 10.
-        sigma = beta_1/(1. + torch.sqrt((importance - .5)**2.))
+        sigma = beta_1/(1. + beta_2*torch.sqrt((importance - .5)**2.))
         mu = importance
         z = torch.randn(importance.shape, device=self.device) * sigma + mu
-        non_importance = torch.sqrt((importance - 1.)**2)
-        z = z - non_importance/beta_1
+        #non_importance = torch.sqrt((importance - 1.)**2)
+        #z = z - non_importance/beta_1
         return torch.relu(z.clamp_max(1.))
 
     def noiser_gate(self, x, importance):
@@ -178,7 +178,7 @@ class DAGNF(nn.Module):
 
     def update_dual_param(self):
         with torch.no_grad():
-            alpha = 1./self.d#self.c / self.d
+            alpha = .1/self.d#self.c / self.d
             lag_const = self.dag_embedding.dag.get_power_trace(alpha)
             if self.dag_const > 0. and lag_const > self.tol:
                 self.lambd = self.lambd + self.c * lag_const
