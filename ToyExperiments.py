@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 
 
-def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1., nb_epoch=50000, pre_heating_epochs=1000):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=1000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -32,7 +32,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
         model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=.01)
     else:
         model = DAGNF(in_d=dim, hidden_integrand=[100, 100, 100, 100], emb_d=20, emb_net=emb_net, device=device,
-                      l1_weight=.5, nb_steps=nb_steps)
+                      l1_weight=l1, nb_steps=nb_steps)
     model.dag_const = 0.
     #opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
     opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
@@ -62,8 +62,6 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", max_l1=1
 
         if epoch % nb_step_dual == 0 and epoch > pre_heating_epochs:
             model.update_dual_param()
-            if model.l1_weight < max_l1:
-                model.l1_weight = model.l1_weight*1.4
 
         end = timer()
         ll_test, _ = model.compute_ll(x_test)
@@ -140,7 +138,7 @@ parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy 
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=50, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
-parser.add_argument("-max_l1", default=.5, type=float, help="Maximum weight for l1 regularization")
+parser.add_argument("-l1", default=.5, type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs")
 
 args = parser.parse_args()
@@ -154,5 +152,5 @@ else:
 for toy in toys:
     if not(os.path.isdir(args.folder + toy)):
         os.makedirs(args.folder + toy)
-    train_toy(toy, load=args.load, folder=args.folder, nb_step_dual=args.nb_steps_dual, max_l1=args.max_l1,
+    train_toy(toy, load=args.load, folder=args.folder, nb_step_dual=args.nb_steps_dual, l1=args.l1,
               nb_epoch=args.nb_epoch)
