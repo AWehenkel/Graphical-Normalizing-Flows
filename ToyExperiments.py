@@ -26,12 +26,12 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., n
 
     dim = x.shape[1]
     linear_net = False
-    emb_net = MLP(dim, hidden=[50, 50, 50], out_d=20, device=device)
+    emb_net = MLP(dim, hidden=[150, 150, 150], out_d=20, device=device)
     if linear_net:
         linear_net = MLP(in_d=20, hidden=[100, 100, 100, 100], out_d=2, device=device)
         model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=l1)
     else:
-        model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
+        model = DAGNF(in_d=dim, hidden_integrand=[150, 150, 150], emb_d=20, emb_net=emb_net, device=device,
                       l1_weight=l1, nb_steps=nb_steps)
     model.dag_const = 0.
     #opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)

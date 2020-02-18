@@ -21,6 +21,7 @@ class DAGNN(nn.Module):
         self.stoch_gate = True
         self.noise_gate = False
         self.net = net if net is not None else IdentityNN()
+        self.gumble = True
         with torch.no_grad():
             self.constrainA(h_thresh)
 
@@ -39,14 +40,14 @@ class DAGNN(nn.Module):
         self.A.requires_grad = False
 
     def stochastic_gate(self, importance):
-        if True:
+        if self.gumble:
             # Gumble soft-max gate
-            temp = 1.
-            epsilon = .5
-            g1 = -torch.log(-torch.log(torch.rand(importance.shape)))
-            g2 = -torch.log(-torch.log(torch.rand(importance.shape)))
-            z1 = torch.exp((torch.log(importance*.5 + epsilon) + g1)/temp)
-            z2 = torch.exp((torch.log(1 - importance*.5 - epsilon) + g2)/temp)
+            temp = 2.
+            epsilon = .2
+            g1 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
+            g2 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
+            z1 = torch.exp((torch.log(importance*.8 + epsilon) + g1)/temp)
+            z2 = torch.exp((torch.log(1 - importance*.8 - epsilon) + g2)/temp)
             return z1 / (z1 + z2)
 
         else:
