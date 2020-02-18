@@ -21,7 +21,7 @@ class DAGNN(nn.Module):
         self.stoch_gate = True
         self.noise_gate = False
         self.net = net if net is not None else IdentityNN()
-        self.gumble = True
+        self.gumble = False
         with torch.no_grad():
             self.constrainA(h_thresh)
 
