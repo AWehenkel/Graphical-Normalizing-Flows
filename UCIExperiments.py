@@ -262,6 +262,7 @@ parser.add_argument("-int_net", default=[100, 100, 100, 100], nargs="+", type=in
 parser.add_argument("-emb_net", default=[100, 100, 100, 10], nargs="+", type=int, help="NN layers of embedding")
 parser.add_argument("-UMNN_MAF", default=False, action="store_true", help="replace the DAG-NF by a UMNN-MAF")
 parser.add_argument("-nb_steps", default=20, type=int, help="Number of integration steps.")
+parser.add_argument("-min_pre_heating_epochs", default=30, type=int, help="Number of heating steps.")
 
 
 args = parser.parse_args()
@@ -279,4 +280,4 @@ for toy in toys:
         os.makedirs(path)
     train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
           int_net=args.int_net, emb_net=args.emb_net, b_size=args.b_size, all_args=args, umnn_maf=args.UMNN_MAF,
-          nb_steps=args.nb_steps)
+          nb_steps=args.nb_steps, min_pre_heating_epochs=args.min_pre_heating_epochs)

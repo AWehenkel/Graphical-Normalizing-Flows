@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 
 
-def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=1000):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=1000):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -26,12 +26,12 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., n
 
     dim = x.shape[1]
     linear_net = False
-    emb_net = MLP(dim, hidden=[150, 150, 150, 150], out_d=20, device=device)
+    emb_net = MLP(dim, hidden=[50, 50, 50], out_d=20, device=device)
     if linear_net:
         linear_net = MLP(in_d=20, hidden=[100, 100, 100, 100], out_d=2, device=device)
         model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=l1)
     else:
-        model = DAGNF(in_d=dim, hidden_integrand=[150, 150, 150, 150], emb_d=20, emb_net=emb_net, device=device,
+        model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
                       l1_weight=l1, nb_steps=nb_steps)
     model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
@@ -138,7 +138,7 @@ parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy 
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=50, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
-parser.add_argument("-l1", default=.5, type=float, help="Maximum weight for l1 regularization")
+parser.add_argument("-l1", default=.1, type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs")
 
 args = parser.parse_args()
