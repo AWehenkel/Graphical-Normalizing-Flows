@@ -79,7 +79,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
         l1_weight = l1
         model = DAGNF(in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_net=emb_net, device=device,
-                      l1_weight=.01, nb_steps=nb_steps)
+                      l1_weight=l1, nb_steps=nb_steps)
 
     model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
@@ -182,7 +182,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         else:
             dagness = model.DAGness()
             if dagness < 1. and epoch > min_pre_heating_epochs:
-                model.l1_weight = .01
+                model.l1_weight = .0
                 model.dag_const = 1.
                 logger.info("Dagness constraint set on.")
             logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
