@@ -44,7 +44,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         opt.load_state_dict(torch.load(toy + '/ADAM.pt'))
         logger.info("Model loaded.")
 
-    model.getDag().stoch_gate = True
+    model.getDag().stoch_gate = False
     model.getDag().noise_gate = False
     for epoch in range(nb_epoch):
         ll_tot = 0
