@@ -73,8 +73,17 @@ class DAGNN(nn.Module):
 
     def forward(self, x):
         if self.h_thresh > 0:
-            e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.hard_thresholded_A().unsqueeze(0)
-                 .expand(x.shape[0], -1, -1)).view(x.shape[0] * self.d, -1)
+            if self.stoch_gate:
+                e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.stochastic_gate(self.hard_thresholded_A().unsqueeze(0)
+                 .expand(x.shape[0], -1, -1))).view(x.shape[0] * self.d, -1)
+            elif self.noise_gate:
+                e = self.noiser_gate(x.unsqueeze(1).expand(-1, self.d, -1),
+                                     self.hard_thresholded_A().unsqueeze(0)
+                                     .expand(x.shape[0], -1, -1))\
+                    .view(x.shape[0] * self.d, -1)
+            else:
+                e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.hard_thresholded_A().unsqueeze(0)
+                     .expand(x.shape[0], -1, -1)).view(x.shape[0] * self.d, -1)
         elif self.s_thresh:
             if self.stoch_gate:
                 e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.stochastic_gate(self.soft_thresholded_A().unsqueeze(0)
