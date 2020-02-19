@@ -82,8 +82,8 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                       l1_weight=.01, nb_steps=nb_steps)
 
     model.dag_const = 0.
-    # opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
-    opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
+    opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
+    # opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
 
     model.getDag().stoch_gate = True
     model.getDag().noise_gate = False

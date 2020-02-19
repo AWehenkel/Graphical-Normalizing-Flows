@@ -34,8 +34,8 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., n
         model = DAGNF(in_d=dim, hidden_integrand=[150, 150, 150], emb_d=20, emb_net=emb_net, device=device,
                       l1_weight=l1, nb_steps=nb_steps)
     model.dag_const = 0.
-    #opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
-    opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
+    opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
+    #opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
 
     if load:
         logger.info("Loading model...")
