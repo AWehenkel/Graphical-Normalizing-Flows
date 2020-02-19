@@ -181,7 +181,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 format(epoch, ll_tot, ll_test, end - start))
         else:
             dagness = model.DAGness()
-            if dagness < 1. and epoch > min_pre_heating_epochs:
+            if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
                 model.l1_weight = .0
                 model.dag_const = 1.
                 logger.info("Dagness constraint set on.")
