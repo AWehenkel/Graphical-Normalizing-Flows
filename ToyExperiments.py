@@ -68,7 +68,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=20, folder="", l1=1., n
         ll_test = -ll_test.mean()
         dagness = model.DAGness()
         if dagness < 1. and epoch > pre_heating_epochs:
-            model.l1_weight = .1
+            model.l1_weight = .05
             model.dag_const = 1.
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test.item(), model.DAGness(), end-start))

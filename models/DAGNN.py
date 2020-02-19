@@ -21,7 +21,7 @@ class DAGNN(nn.Module):
         self.stoch_gate = True
         self.noise_gate = False
         self.net = net if net is not None else IdentityNN()
-        self.gumble = False
+        self.gumble = True
         with torch.no_grad():
             self.constrainA(h_thresh)
 
@@ -43,7 +43,7 @@ class DAGNN(nn.Module):
         if self.gumble:
             # Gumble soft-max gate
             temp = 2.
-            epsilon = .2
+            epsilon = .2 - 1e-6
             g1 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
             g2 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
             z1 = torch.exp((torch.log(importance*.8 + epsilon) + g1)/temp)
@@ -154,7 +154,7 @@ class DAGNF(nn.Module):
         self.gamma = .9
         self.d = in_d
         self.prev_trace = self.dag_embedding.dag.get_power_trace(self.c / self.d)
-        self.tol = 1e-8
+        self.tol = 1e-12
         self.l1_weight = l1_weight
         self.dag_const = 1.
 
