@@ -34,6 +34,7 @@ class DAGNN(nn.Module):
         self.stoch_gate = False
         self.noise_gate = False
         self.s_thresh = False
+        self.h_thresh = 0.
         self.A *= (self.soft_thresholded_A().clone().abs() > zero_threshold).float()
         self.A *= 1. - torch.eye(self.d, device=self.device)
         self.A /= self.A * (self.A > 0.).float() + (self.A == 0).float()

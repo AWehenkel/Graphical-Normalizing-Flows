@@ -51,13 +51,16 @@ def load_data(name):
 
 def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000,
           int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, min_pre_heating_epochs=30,
-          all_args=None):
+          all_args=None, file_number=None):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
     logger.info("Creating model...")
 
     device = "cpu" if not(torch.cuda.is_available()) else "cuda:0"
+
+    if load:
+        file_number = "_" + file_number if file_number is not None else ""
 
     batch_size = b_size
 
@@ -89,56 +92,10 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     model.getDag().noise_gate = False
     if load:
         logger.info("Loading model...")
-        model.load_state_dict(torch.load(path + '/model.pt', map_location={"cuda:0": device}))
+        model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
         model.train()
-        opt.load_state_dict(torch.load(path + '/ADAM.pt', map_location={"cuda:0": device}))
-        logger.info("Model loaded.")
-        with torch.no_grad():
-            model.dag_embedding.dag.h_threshold = .001
-            font = {'family': 'normal',
-                    'weight': 'bold',
-                    'size': 12}
-            matplotlib.rc('font', **font)
-            A_normal = model.dag_embedding.dag.hard_thresholded_A().detach().cpu().numpy().T
-            A_thresholded = A_normal * (A_normal > .001)
-            j = 0
-            for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
-                #A /= A.sum() / np.log(dim)
-                ax = plt.subplot(2, 2, 1 + j)
-                plt.title(name + " DAG")
-                G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-                pos = nx.layout.spring_layout(G)
-                nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
-                edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-                nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
-                                       arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                       edge_cmap=plt.cm.Blues, width=5 * weights)
-                labels = {}
-                for i in range(dim):
-                    labels[i] = str(r'$%d$' % i)
-                nx.draw_networkx_labels(G, pos, labels, font_size=12)
+        opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
 
-                ax = plt.subplot(2, 2, 2 + j)
-                out = ax.matshow(np.log(A))
-                plt.colorbar(out, ax=ax)
-                j += 2
-                # vf.plt_flow(model.compute_ll, ax)
-            plt.savefig("%s/DAG_loaded.pdf" % (path))
-            G.clear()
-            plt.clf()
-        print(model.dag_embedding.dag.A)
-        # Valid loop
-        ll_test = 0.
-        i = 0.
-        model.dag_embedding.dag.h_thresh = .00001
-
-        for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
-            ll, _ = model.compute_ll(cur_x)
-            ll_test += ll.mean().item()
-            i += 1
-            logger.info(ll_test/i)
-        ll_test /= i
-        return
 
     for epoch in range(nb_epoch):
         ll_tot = 0
