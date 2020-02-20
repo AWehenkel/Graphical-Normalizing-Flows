@@ -87,9 +87,9 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
     # opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
-
-    model.getDag().stoch_gate = True
-    model.getDag().noise_gate = False
+    if not umnn_maf:
+        model.getDag().stoch_gate = True
+        model.getDag().noise_gate = False
     if load:
         logger.info("Loading model...")
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))

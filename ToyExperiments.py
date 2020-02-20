@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 
 
-def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=1000):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=100):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -67,8 +67,8 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         ll_test, _ = model.compute_ll(x_test)
         ll_test = -ll_test.mean()
         dagness = model.DAGness()
-        if dagness < 1. and epoch > pre_heating_epochs:
-            model.l1_weight = .05
+        if dagness > 1e-15 and dagness < 1. and epoch > pre_heating_epochs:
+            model.l1_weight = .2
             model.dag_const = 1.
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test.item(), model.DAGness(), end-start))
@@ -138,7 +138,7 @@ parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy 
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=50, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
-parser.add_argument("-l1", default=.1, type=float, help="Maximum weight for l1 regularization")
+parser.add_argument("-l1", default=.5, type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs")
 
 args = parser.parse_args()

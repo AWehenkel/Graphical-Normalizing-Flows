@@ -165,7 +165,7 @@ class DAGNF(nn.Module):
         self.gamma = .9
         self.d = in_d
         self.prev_trace = self.dag_embedding.dag.get_power_trace(self.c / self.d)
-        self.tol = 1e-12
+        self.tol = 1e-15
         self.l1_weight = l1_weight
         self.dag_const = 1.
 
@@ -210,7 +210,7 @@ class DAGNF(nn.Module):
                     self.c *= self.eta
                 self.prev_trace = lag_const
             elif self.dag_const > 0:
-                self.dag_embedding.dag.post_process(1e-4)
+                self.dag_embedding.dag.post_process(1e-1)
                 self.dag_const = 0.
         return lag_const
 
