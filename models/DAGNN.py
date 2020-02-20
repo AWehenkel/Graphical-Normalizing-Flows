@@ -39,16 +39,17 @@ class DAGNN(nn.Module):
         self.A *= 1. - torch.eye(self.d, device=self.device)
         self.A /= self.A * (self.A > 0.).float() + (self.A == 0).float()
         self.A.requires_grad = False
+        self.A.grad = None
 
     def stochastic_gate(self, importance):
         if self.gumble:
             # Gumble soft-max gate
             temp = 2.
-            epsilon = -1e-6
+            epsilon = 1e-6
             g1 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
             g2 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
             z1 = torch.exp((torch.log(importance + epsilon) + g1)/temp)
-            z2 = torch.exp((torch.log(1 - importance - epsilon) + g2)/temp)
+            z2 = torch.exp((torch.log(1 - importance + epsilon) + g2)/temp)
             return z1 / (z1 + z2)
 
         else:
