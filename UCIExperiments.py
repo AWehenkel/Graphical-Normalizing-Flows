@@ -96,6 +96,10 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
         model.train()
         opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
+        if not train:
+            model.dag_embedding.dag.stoch_gate = False
+            model.dag_embedding.dag.noise_gate = False
+            model.dag_embedding.dag.s_thresh = False
 
 
     for epoch in range(nb_epoch):
@@ -135,14 +139,14 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         ll_test = 0.
         i = 0.
         with torch.no_grad():
-            model.set_steps_nb(nb_steps + 20)
+            #model.set_steps_nb(nb_steps + 20)
             for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
                 ll, _ = model.compute_ll(cur_x)
-                logger.info(str((ll.mean(), ll.std(), _.mean(0).mean(), _.std(0).mean())))
+                #logger.info(str((ll.mean(), ll.std(), _.mean(0).mean(), _.std(0).mean())))
 
                 ll_test += ll.mean().item()
                 i += 1
-            model.set_steps_nb(nb_steps)
+            #model.set_steps_nb(nb_steps)
         ll_test /= i
 
         end = timer()
