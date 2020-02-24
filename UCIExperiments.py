@@ -123,7 +123,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
             ll_tot /= i
         else:
-            ll_tot = None
+            ll_tot = 0.
 
         # Valid loop
         ll_test = 0.
