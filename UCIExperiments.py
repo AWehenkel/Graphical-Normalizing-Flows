@@ -124,7 +124,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         # Training loop
         if train:
             for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
-                model.set_steps_nb(nb_steps + torch.randint(0, 10))
+                model.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
                 loss = model.loss(cur_x) if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
                 ll_tot += loss.item()
                 i += 1
