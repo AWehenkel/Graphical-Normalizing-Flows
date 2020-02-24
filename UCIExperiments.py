@@ -124,10 +124,13 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         # Valid loop
         ll_test = 0.
         i = 0.
-        for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
-            ll, _ = model.compute_ll(cur_x)
-            ll_test += ll.mean().item()
-            i += 1
+        with torch.no_grad:
+            model.set_steps_nb(nb_steps + 20)
+            for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
+                ll, _ = model.compute_ll(cur_x)
+                ll_test += ll.mean().item()
+                i += 1
+            model.set_steps_nb(nb_steps)
         ll_test /= i
 
         end = timer()

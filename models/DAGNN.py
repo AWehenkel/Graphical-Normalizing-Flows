@@ -175,6 +175,9 @@ class DAGNF(nn.Module):
         self.prev_trace.to(device)
         return self
 
+    def set_steps_nb(self, nb_steps):
+        self.UMNN.set_steps_nb(nb_steps)
+
     def forward(self, x):
         return self.UMNN(x)
 
