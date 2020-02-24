@@ -114,11 +114,12 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         if epoch % nb_step_dual == 0 and epoch != 0 and not umnn_maf and epoch > min_pre_heating_epochs:
             model.update_dual_param()
 
-        dagness = model.DAGness()
-        if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
-            model.l1_weight = .0
-            model.dag_const = 1.
-            logger.info("Dagness constraint set on.")
+        if not umnn_maf:
+            dagness = model.DAGness()
+            if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
+                model.l1_weight = .0
+                model.dag_const = 1.
+                logger.info("Dagness constraint set on.")
 
         i = 0
         # Training loop
