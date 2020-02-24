@@ -96,7 +96,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
         model.train()
         opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
-        if not train and umnn_maf:
+        if not train and not umnn_maf:
             model.dag_embedding.dag.stoch_gate = False
             model.dag_embedding.dag.noise_gate = False
             model.dag_embedding.dag.s_thresh = False
