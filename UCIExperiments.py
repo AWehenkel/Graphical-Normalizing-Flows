@@ -51,7 +51,7 @@ def load_data(name):
 
 def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000,
           int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, min_pre_heating_epochs=30,
-          all_args=None, file_number=None):
+          all_args=None, file_number=None, train=True):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -60,6 +60,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     device = "cpu" if not(torch.cuda.is_available()) else "cuda:0"
 
     if load:
+        train = False
         file_number = "_" + file_number if file_number is not None else ""
 
     batch_size = b_size
@@ -111,15 +112,18 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
         i = 0
         # Training loop
-        for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
-            loss = model.loss(cur_x) if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
-            ll_tot += loss.item()
-            i += 1
-            opt.zero_grad()
-            loss.backward(retain_graph=True)
-            opt.step()
+        if train:
+            for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
+                loss = model.loss(cur_x) if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
+                ll_tot += loss.item()
+                i += 1
+                opt.zero_grad()
+                loss.backward(retain_graph=True)
+                opt.step()
 
-        ll_tot /= i
+            ll_tot /= i
+        else:
+            ll_tot = None
 
         # Valid loop
         ll_test = 0.
