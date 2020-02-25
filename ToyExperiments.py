@@ -31,7 +31,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         linear_net = MLP(in_d=20, hidden=[100, 100, 100, 100], out_d=2, device=device)
         model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=l1)
     else:
-        model = DAGNF(nb_flow=1, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
+        model = DAGNF(nb_flow=2, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
                       l1_weight=l1, nb_steps=nb_steps)
     model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)

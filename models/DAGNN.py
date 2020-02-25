@@ -194,7 +194,6 @@ class DAGNF(nn.Module):
         self.device = kwargs['device']
         self.nets = ListModule(self, "DAGFlow")
         for i in range(nb_flow):
-            print("coucou")
             model = DAGStep(**kwargs)
             self.nets.append(model)
 
@@ -214,7 +213,8 @@ class DAGNF(nn.Module):
     def compute_ll(self, x):
         jac_tot = 0.
         if len(self.nets) > 1:
-            for net in self.nets[-1]:
+            for id_net in range(len(self.nets) -1):
+                net = self.nets[id_net]
                 x, jac = net.compute_log_jac(x)
                 jac_tot += jac.sum(1)
         ll, z = self.nets[-1].compute_ll(x)
@@ -238,8 +238,10 @@ class DAGNF(nn.Module):
     def loss(self, x):
         loss_tot = 0.
         if len(self.nets) > 1:
-            for net in self.nets[:-1]:
+            for id_net in range(len(self.nets) -1):
+                net = self.nets[id_net]
                 x, loss = net.loss(x, only_jac=True)
+                print(x.shape)
                 loss_tot += loss
         return loss_tot + self.nets[-1].loss(x)
 
@@ -295,7 +297,7 @@ class DAGStep(nn.Module):
 
     def loss(self, x, only_jac=False):
         if only_jac:
-            x, ll = self.UMNN.compute_ll(x)
+            x, ll = self.compute_log_jac(x)
             ll = ll.sum(1)
         else:
             ll, _ = self.UMNN.compute_ll(x)
