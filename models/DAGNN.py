@@ -241,7 +241,6 @@ class DAGNF(nn.Module):
             for id_net in range(len(self.nets) -1):
                 net = self.nets[id_net]
                 x, loss = net.loss(x, only_jac=True)
-                print(x.shape)
                 loss_tot += loss
         return loss_tot + self.nets[-1].loss(x)
 
