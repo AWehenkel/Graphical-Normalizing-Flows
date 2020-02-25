@@ -51,7 +51,7 @@ def load_data(name):
 
 def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000,
           int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, min_pre_heating_epochs=30,
-          all_args=None, file_number=None, train=True, solver="CC"):
+          all_args=None, file_number=None, train=True, solver="CC", nb_flow=1):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -82,24 +82,26 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 emb_net = MNISTCNN()
             emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
         l1_weight = l1
-        model = DAGNF(in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_net=emb_net, device=device,
+        model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_net=emb_net, device=device,
                       l1_weight=l1, nb_steps=nb_steps, solver=solver)
 
     model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
     # opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
     if not umnn_maf and train:
-        model.getDag().stoch_gate = True
-        model.getDag().noise_gate = False
+        for net in model.nets:
+            net.getDag().stoch_gate = True
+            net.getDag().noise_gate = False
     if load:
         logger.info("Loading model...")
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
         model.train()
         opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
         if not train and not umnn_maf:
-            model.dag_embedding.dag.stoch_gate = False
-            model.dag_embedding.dag.noise_gate = False
-            model.dag_embedding.dag.s_thresh = False
+            for net in model.nets:
+                net.dag_embedding.dag.stoch_gate = False
+                net.dag_embedding.dag.noise_gate = False
+                net.dag_embedding.dag.s_thresh = False
 
 
     for epoch in range(nb_epoch):
@@ -109,17 +111,18 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         # Update constraints
         if epoch % 1 == 0 and not umnn_maf:
             with torch.no_grad():
-                model.dag_embedding.dag.constrainA(zero_threshold=0.)
+                model.constrainA(zero_threshold=0.)
 
         if epoch % nb_step_dual == 0 and epoch != 0 and not umnn_maf and epoch > min_pre_heating_epochs:
             model.update_dual_param()
 
         if not umnn_maf:
-            dagness = model.DAGness()
-            if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
-                model.l1_weight = .0
-                model.dag_const = 1.
-                logger.info("Dagness constraint set on.")
+            for net in model.nets:
+                dagness = net.DAGness()
+                if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
+                    net.l1_weight = .0
+                    net.dag_const = 1.
+                    logger.info("Dagness constraint set on.")
 
         i = 0
         # Training loop
@@ -154,13 +157,13 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 "epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                 format(epoch, ll_tot, ll_test, end - start))
         else:
-            dagness = model.DAGness()
+            dagness = max(model.DAGness())
             logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                         format(epoch, ll_tot, ll_test, dagness, end-start))
 
         if epoch % 10 == 0 and not umnn_maf:
             for threshold in [.1, .01, .0001, 1e-8]:
-                model.dag_embedding.dag.h_thresh = threshold
+                model.set_h_threshold(threshold)
                 # Valid loop
                 ll_test = 0.
                 i = 0.
@@ -169,9 +172,10 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     ll_test += ll.mean().item()
                     i += 1
                 ll_test /= i
+                dagness = max(model.DAGness())
                 logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
-                            format(epoch, threshold, ll_test, model.DAGness()))
-            model.dag_embedding.dag.h_threshold = 0.
+                            format(epoch, threshold, ll_test, dagness))
+            model.set_h_threshold(0.)
 
         if epoch % nb_step_dual == 0:
 
@@ -182,7 +186,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                         'size': 12}
 
                 matplotlib.rc('font', **font)
-                A_normal = model.dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
+                A_normal = model.nets[0].dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
                 logger.info(str(A_normal))
                 A_thresholded = A_normal * (A_normal > .001)
                 j = 0
@@ -236,6 +240,7 @@ parser.add_argument("-min_pre_heating_epochs", default=30, type=int, help="Numbe
 parser.add_argument("-f_number", default=None, type=str, help="Number of heating steps.")
 parser.add_argument("-solver", default="CC", type=str, help="Which integral solver to use.",
                     choices=["CC", "CCParallel"])
+parser.add_argument("-nb_flow", type=int, default=1, help="Number of steps in the flow.")
 
 
 args = parser.parse_args()
@@ -254,4 +259,4 @@ for toy in toys:
     train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
           int_net=args.int_net, emb_net=args.emb_net, b_size=args.b_size, all_args=args, umnn_maf=args.UMNN_MAF,
           nb_steps=args.nb_steps, min_pre_heating_epochs=args.min_pre_heating_epochs, file_number=args.f_number,
-          solver=args.solver)
+          solver=args.solver, nb_flow=args.nb_flow)

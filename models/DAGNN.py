@@ -153,7 +153,109 @@ class DAGEmbedding(nn.Module):
         return self.parallel_nets.forward(x_t, self.m_embeding)
 
 
+class ListModule(object):
+    def __init__(self, module, prefix, *args):
+        """
+        The ListModule class is a container for multiple nn.Module.
+        :nn.Module module: A module to add in the list
+        :string prefix:
+        :list of nn.module args: Other modules to add in the list
+        """
+        self.module = module
+        self.prefix = prefix
+        self.num_module = 0
+        for new_module in args:
+            self.append(new_module)
+
+    def append(self, new_module):
+        if not isinstance(new_module, nn.Module):
+            raise ValueError('Not a Module')
+        else:
+            self.module.add_module(self.prefix + str(self.num_module), new_module)
+            self.num_module += 1
+
+    def to(self, device):
+        for module in self:
+            module.to(device)
+
+    def __len__(self):
+        return self.num_module
+
+    def __getitem__(self, i):
+        i = self.num_module + i if i < 0 else i
+        if i < 0 or i >= self.num_module:
+            raise IndexError('Out of bound')
+        return getattr(self.module, self.prefix + str(i))
+
+
 class DAGNF(nn.Module):
+    def __init__(self, nb_flow=1, **kwargs):
+        super().__init__()
+        self.device = kwargs['device']
+        self.nets = ListModule(self, "DAGFlow")
+        for i in range(nb_flow):
+            print("coucou")
+            model = DAGStep(**kwargs)
+            self.nets.append(model)
+
+    def to(self, device):
+        self.nets.to(device)
+        return self
+
+    def set_steps_nb(self, nb_steps):
+        for net in self.nets:
+            net.set_steps_nb(nb_steps)
+
+    def forward(self, x):
+        for net in self.nets:
+            x = net.forward(x)
+        return x
+
+    def compute_ll(self, x):
+        jac_tot = 0.
+        if len(self.nets) > 1:
+            for net in self.nets[-1]:
+                x, jac = net.compute_log_jac(x)
+                jac_tot += jac.sum(1)
+        ll, z = self.nets[-1].compute_ll(x)
+        ll += jac_tot
+        return ll, z
+
+    def DAGness(self):
+        dagness = []
+        for net in self.nets:
+            dagness.append(net.DAGness())
+        return dagness
+
+    def set_h_threshold(self, threshold):
+        for net in self.nets:
+            net.dag_embedding.dag.h_thresh = threshold
+
+    def set_nb_steps(self, nb_steps):
+        for net in self.nets:
+            net.set_steps_nb(nb_steps)
+
+    def loss(self, x):
+        loss_tot = 0.
+        if len(self.nets) > 1:
+            for net in self.nets[:-1]:
+                x, loss = net.loss(x, only_jac=True)
+                loss_tot += loss
+        return loss_tot + self.nets[-1].loss(x)
+
+    def constrainA(self, zero_threshold):
+        for net in self.nets:
+            net.constrainA(zero_threshold=zero_threshold)
+
+    def getDag(self, index=0):
+        return self.nets[index].dag_embedding.dag
+
+    def update_dual_param(self):
+        for net in self.nets:
+            net.update_dual_param()
+
+
+class DAGStep(nn.Module):
     def __init__(self, in_d, hidden_integrand=[50, 50, 50], emb_net=None, emb_d=-1, act_func='ELU',
                  nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1.):
         super().__init__()
@@ -181,6 +283,9 @@ class DAGNF(nn.Module):
     def forward(self, x):
         return self.UMNN(x)
 
+    def compute_log_jac(self, x, context=None):
+        return self.UMNN.compute_log_jac_bis(x, context)
+
     def compute_ll(self, x):
         return self.UMNN.compute_ll(x)
 
@@ -188,12 +293,18 @@ class DAGNF(nn.Module):
         alpha = .1 / self.d
         return self.dag_embedding.dag.get_power_trace(alpha)
 
-    def loss(self, x):
-        ll, _ = self.UMNN.compute_ll(x)
+    def loss(self, x, only_jac=False):
+        if only_jac:
+            x, ll = self.UMNN.compute_ll(x)
+            ll = ll.sum(1)
+        else:
+            ll, _ = self.UMNN.compute_ll(x)
         alpha = .1/self.d
         lag_const = self.dag_embedding.dag.get_power_trace(alpha)
         loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) - ll.mean() + \
                self.l1_weight*self.dag_embedding.dag.A.abs().mean()
+        if only_jac:
+            return x, loss
         return loss
 
     def constrainA(self, zero_threshold):

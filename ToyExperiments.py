@@ -31,7 +31,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         linear_net = MLP(in_d=20, hidden=[100, 100, 100, 100], out_d=2, device=device)
         model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=l1)
     else:
-        model = DAGNF(in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
+        model = DAGNF(nb_flow=1, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
                       l1_weight=l1, nb_steps=nb_steps)
     model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
@@ -66,12 +66,12 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         end = timer()
         ll_test, _ = model.compute_ll(x_test)
         ll_test = -ll_test.mean()
-        dagness = model.DAGness()
+        dagness = max(model.DAGness())
         if dagness > 1e-15 and dagness < 1. and epoch > pre_heating_epochs:
             model.l1_weight = .2
             model.dag_const = 1.
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
-                    format(epoch, ll_tot, ll_test.item(), model.DAGness(), end-start))
+                    format(epoch, ll_tot, ll_test.item(), dagness, end-start))
         if epoch % 100 == 0:
             if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians"]:
                 def compute_ll_2spirals(x):
