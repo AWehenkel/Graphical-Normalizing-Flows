@@ -44,7 +44,7 @@ class DAGNN(nn.Module):
     def stochastic_gate(self, importance):
         if self.gumble:
             # Gumble soft-max gate
-            temp = 2.
+            temp = .5
             epsilon = 1e-6
             g1 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
             g2 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
@@ -70,8 +70,8 @@ class DAGNN(nn.Module):
 
     def hard_thresholded_A(self):
         if self.s_thresh:
-            return torch.relu(self.soft_thresholded_A() - self.h_thresh)
-        return torch.relu(self.A**2 - self.h_thresh)
+            return self.soft_thresholded_A()*(self.soft_thresholded_A() > self.h_thresh).float()
+        return self.A**2 * (self.A**2 > self.h_thresh).float()
 
     def forward(self, x):
         if self.h_thresh > 0:
