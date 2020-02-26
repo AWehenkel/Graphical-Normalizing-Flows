@@ -74,7 +74,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
     dim = data.trn.x.shape[1]
     if umnn_maf:
-        model = UMNNMAFFlow(nb_flow=1, nb_in=dim, hidden_derivative=int_net, hidden_embedding=emb_net[:-1],
+        model = UMNNMAFFlow(nb_flow=nb_flow, nb_in=dim, hidden_derivative=int_net, hidden_embedding=emb_net[:-1],
                             embedding_s=emb_net[-1], nb_steps=nb_steps, device=device).to(device)
     else:
         if emb_net is not None:
