@@ -189,12 +189,12 @@ class ListModule(object):
 
 
 class DAGNF(nn.Module):
-    def __init__(self, nb_flow=1, **kwargs):
+    def __init__(self, emb_nets, nb_flow=1, **kwargs):
         super().__init__()
         self.device = kwargs['device']
         self.nets = ListModule(self, "DAGFlow")
         for i in range(nb_flow):
-            model = DAGStep(**kwargs)
+            model = DAGStep(emb_nets=emb_nets[i], **kwargs)
             self.nets.append(model)
 
     def to(self, device):
@@ -238,7 +238,7 @@ class DAGNF(nn.Module):
     def loss(self, x):
         loss_tot = 0.
         if len(self.nets) > 1:
-            for id_net in range(len(self.nets) -1):
+            for id_net in range(len(self.nets) - 1):
                 net = self.nets[id_net]
                 x, loss = net.loss(x, only_jac=True)
                 loss_tot += loss

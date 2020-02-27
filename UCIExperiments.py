@@ -77,12 +77,16 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         model = UMNNMAFFlow(nb_flow=nb_flow, nb_in=dim, hidden_derivative=int_net, hidden_embedding=emb_net[:-1],
                             embedding_s=emb_net[-1], nb_steps=nb_steps, device=device).to(device)
     else:
-        if emb_net is not None:
-            if dataset == "mnist":
-                emb_net = MNISTCNN()
-            emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
+        emb_nets = []
+        for i in range(nb_flow):
+            if emb_net is not None:
+                if dataset == "mnist":
+                    emb_net = MNISTCNN()
+                emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
+            else:
+                emb_nets.append(emb_net)
         l1_weight = l1
-        model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_net=emb_net, device=device,
+        model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_nets=emb_nets, device=device,
                       l1_weight=l1, nb_steps=nb_steps, solver=solver)
 
     model.dag_const = 0.
