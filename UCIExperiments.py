@@ -86,7 +86,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             else:
                 emb_nets.append(emb_net)
         l1_weight = l1
-        model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_net.out_d, emb_nets=emb_nets, device=device,
+        model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_net[0].out_d, emb_nets=emb_nets, device=device,
                       l1_weight=l1, nb_steps=nb_steps, solver=solver)
 
     model.dag_const = 0.
