@@ -329,3 +329,6 @@ class DAGStep(nn.Module):
                 self.dag_const = 0.
         return lag_const
 
+    def set_h_threshold(self, threshold):
+        self.dag_embedding.dag.h_thresh = threshold
+
