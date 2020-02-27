@@ -194,7 +194,7 @@ class DAGNF(nn.Module):
         self.device = kwargs['device']
         self.nets = ListModule(self, "DAGFlow")
         for i in range(nb_flow):
-            model = DAGStep(emb_nets=emb_nets[i], **kwargs)
+            model = DAGStep(emb_net=emb_nets[i], **kwargs)
             self.nets.append(model)
 
     def to(self, device):
