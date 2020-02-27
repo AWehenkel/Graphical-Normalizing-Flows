@@ -1,4 +1,4 @@
-from models import DAGNF, MLP, MNISTCNN
+from models import DAGNF, MLP, MNISTCNN, DAGStep
 import torch
 from timeit import default_timer as timer
 import lib.utils as utils
@@ -82,13 +82,17 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             if emb_net is not None:
                 if dataset == "mnist":
                     net = MNISTCNN()
-                net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
+                else:
+                    net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
             else:
                 net = None
             emb_nets.append(net)
         l1_weight = l1
         model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_nets=emb_nets, device=device,
                       l1_weight=l1, nb_steps=nb_steps, solver=solver)
+        if nb_flow == 1:
+            model = DAGStep(in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_net=emb_nets[0],
+                            device=device, l1_weight=l1, nb_steps=nb_steps, solver=solver)
 
     model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
