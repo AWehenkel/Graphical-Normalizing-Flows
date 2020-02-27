@@ -81,8 +81,8 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         for i in range(nb_flow):
             if emb_net is not None:
                 if dataset == "mnist":
-                    emb_net = MNISTCNN()
-                emb_net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
+                    net = MNISTCNN()
+                net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
             else:
                 emb_nets.append(emb_net)
         l1_weight = l1
