@@ -44,7 +44,7 @@ class DAGNN(nn.Module):
     def stochastic_gate(self, importance):
         if self.gumble:
             # Gumble soft-max gate
-            temp = .5
+            temp = 2.
             epsilon = 1e-6
             g1 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
             g2 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
