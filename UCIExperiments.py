@@ -251,6 +251,7 @@ parser.add_argument("-f_number", default=None, type=str, help="Number of heating
 parser.add_argument("-solver", default="CC", type=str, help="Which integral solver to use.",
                     choices=["CC", "CCParallel"])
 parser.add_argument("-nb_flow", type=int, default=1, help="Number of steps in the flow.")
+parser.add_argument("-test", default=False, action="store_true", type=bool)
 
 
 args = parser.parse_args()
@@ -269,4 +270,4 @@ for toy in toys:
     train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
           int_net=args.int_net, emb_net=args.emb_net, b_size=args.b_size, all_args=args, umnn_maf=args.UMNN_MAF,
           nb_steps=args.nb_steps, min_pre_heating_epochs=args.min_pre_heating_epochs, file_number=args.f_number,
-          solver=args.solver, nb_flow=args.nb_flow)
+          solver=args.solver, nb_flow=args.nb_flow, train=not args.test)
