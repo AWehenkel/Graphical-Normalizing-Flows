@@ -251,8 +251,7 @@ parser.add_argument("-f_number", default=None, type=str, help="Number of heating
 parser.add_argument("-solver", default="CC", type=str, help="Which integral solver to use.",
                     choices=["CC", "CCParallel"])
 parser.add_argument("-nb_flow", type=int, default=1, help="Number of steps in the flow.")
-parser.add_argument("-test", default=False, action="store_true", type=bool)
-
+parser.add_argument("-test", default=False, action="store_true")
 
 args = parser.parse_args()
 from datetime import datetime
