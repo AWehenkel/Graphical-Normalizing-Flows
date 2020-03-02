@@ -1,5 +1,5 @@
 import lib.toy_data as toy_data
-from models import DAGNF, MLP, LinearFlow
+from models import DAGNF, MLP
 import torch
 from timeit import default_timer as timer
 import lib.utils as utils
@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 
 
-def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=100):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=10):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -25,14 +25,19 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    linear_net = False
-    emb_net = MLP(dim, hidden=[50, 50, 50], out_d=20, device=device)
-    if linear_net:
-        linear_net = MLP(in_d=20, hidden=[100, 100, 100, 100], out_d=2, device=device)
-        model = LinearFlow(dim, linear_net=linear_net, emb_net=emb_net, device=device, l1_weight=l1)
-    else:
-        model = DAGNF(nb_flow=1, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=20, emb_net=emb_net, device=device,
-                      l1_weight=l1, nb_steps=nb_steps)
+    linear_net = True
+    nb_flow = 2
+    emb_net = [100, 100, 100, 2]
+    emb_nets = []
+    for i in range(nb_flow):
+        if emb_net is not None:
+            net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
+        else:
+            net = None
+        emb_nets.append(net)
+
+    model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=emb_nets[0].out_d, emb_nets=emb_nets, device=device,
+                  l1_weight=l1, nb_steps=nb_steps, linear_normalizer=linear_net)
     model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
     #opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
@@ -138,7 +143,7 @@ parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy 
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=50, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
-parser.add_argument("-l1", default=2.5, type=float, help="Maximum weight for l1 regularization")
+parser.add_argument("-l1", default=.5, type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs")
 
 args = parser.parse_args()

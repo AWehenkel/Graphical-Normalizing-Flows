@@ -1,12 +1,13 @@
 import torch
 import torch.nn as nn
 from UMNN import IntegrandNetwork, UMNNMAF
+from .LinearFlow import LinearNormalizer
 
 class IdentityNN(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x, context=None):
         return x
 
 
@@ -28,6 +29,9 @@ class DAGNN(nn.Module):
     def to(self, device):
         self.A = self.A.to(device)
         self.device = device
+        return self
+
+    def get_dag(self):
         return self
 
     def post_process(self, zero_threshold):
@@ -73,7 +77,7 @@ class DAGNN(nn.Module):
             return self.soft_thresholded_A()*(self.soft_thresholded_A() > self.h_thresh).float()
         return self.A**2 * (self.A**2 > self.h_thresh).float()
 
-    def forward(self, x):
+    def forward(self, x, context=None):
         if self.h_thresh > 0:
             if self.stoch_gate:
                 e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.stochastic_gate(self.hard_thresholded_A().unsqueeze(0)
@@ -100,7 +104,7 @@ class DAGNN(nn.Module):
         else:
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))\
                 .view(x.shape[0]*self.d, -1)
-        return self.net(e).view(x.shape[0], self.d, -1).permute(0, 2, 1).contiguous().view(x.shape[0], -1)
+        return self.net(e, context).view(x.shape[0], self.d, -1).permute(0, 2, 1).contiguous().view(x.shape[0], -1)
 
     def constrainA(self, zero_threshold=.0001):
         #self.A /= (self.A.sum(1).unsqueeze(1).expand(-1, self.d) + 1e-5)
@@ -138,6 +142,9 @@ class DAGEmbedding(nn.Module):
         self.parallel_nets = IntegrandNetwork(in_d, 1 + in_d + self.emb_d, hiddens_integrand, 1, act_func=act_func,
                                               device=device)
 
+    def get_dag(self):
+        return self.dag
+
     def to(self, device):
         self.dag.to(device)
         self.parallel_nets.to(device)
@@ -149,7 +156,7 @@ class DAGEmbedding(nn.Module):
                                      .expand(b_size, -1, -1).view(b_size, -1)), 1)
         return self.m_embeding
 
-    def forward(self, x_t):
+    def forward(self, x_t, context=None):
         return self.parallel_nets.forward(x_t, self.m_embeding)
 
 
@@ -249,7 +256,7 @@ class DAGNF(nn.Module):
             net.constrainA(zero_threshold=zero_threshold)
 
     def getDag(self, index=0):
-        return self.nets[index].dag_embedding.dag
+        return self.nets[index].dag_embedding.get_dag()
 
     def update_dual_param(self):
         for net in self.nets:
@@ -258,66 +265,72 @@ class DAGNF(nn.Module):
 
 class DAGStep(nn.Module):
     def __init__(self, in_d, hidden_integrand=[50, 50, 50], emb_net=None, emb_d=-1, act_func='ELU',
-                 nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1.):
+                 nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1., linear_normalizer=False):
         super().__init__()
-        self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device)
-        self.UMNN = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, device=device, solver=solver)
+        self.linear_normalizer = linear_normalizer
+        if linear_normalizer:
+            self.dag_embedding = DAGNN(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN())
+            self.normalizer = LinearNormalizer(self.dag_embedding, emb_net, in_d, device=device)
+        else:
+            self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device)
+            self.normalizer = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, device=device, solver=solver)
         self.lambd = .0
         self.c = 1e-3
         self.eta = 10
         self.gamma = .9
         self.d = in_d
-        self.prev_trace = self.dag_embedding.dag.get_power_trace(self.c / self.d)
-        self.tol = 1e-15
+        self.prev_trace = self.dag_embedding.get_dag().get_power_trace(self.c / self.d)
+        self.tol = 1e-20
         self.l1_weight = l1_weight
         self.dag_const = 1.
 
     def to(self, device):
         self.dag_embedding.to(device)
-        self.UMNN.to(device)
+        self.normalizer.to(device)
         self.prev_trace.to(device)
         return self
 
     def set_steps_nb(self, nb_steps):
-        self.UMNN.set_steps_nb(nb_steps)
+        if not self.linear_normalizer:
+            self.normalizer.set_steps_nb(nb_steps)
 
     def forward(self, x):
-        return self.UMNN(x)
+        return self.normalizer(x)
 
     def compute_log_jac(self, x, context=None):
-        return self.UMNN.compute_log_jac_bis(x, context)
+        return self.normalizer.compute_log_jac_bis(x, context)
 
     def compute_ll(self, x):
-        return self.UMNN.compute_ll(x)
+        return self.normalizer.compute_ll(x)
 
     def DAGness(self):
         alpha = .1 / self.d
-        return self.dag_embedding.dag.get_power_trace(alpha)
+        return self.dag_embedding.get_dag().get_power_trace(alpha)
 
     def loss(self, x, only_jac=False):
         if only_jac:
             x, ll = self.compute_log_jac(x)
             ll = ll.sum(1)
         else:
-            ll, _ = self.UMNN.compute_ll(x)
+            ll, _ = self.normalizer.compute_ll(x)
         alpha = .1/self.d
-        lag_const = self.dag_embedding.dag.get_power_trace(alpha)
+        lag_const = self.dag_embedding.get_dag().get_power_trace(alpha)
         loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) - ll.mean() + \
-               self.l1_weight*self.dag_embedding.dag.A.abs().mean()
+               self.l1_weight*self.dag_embedding.get_dag().A.abs().mean()
         if only_jac:
             return x, loss
         return loss
 
     def constrainA(self, zero_threshold):
-        self.dag_embedding.dag.constrainA(zero_threshold=zero_threshold)
+        self.dag_embedding.get_dag().constrainA(zero_threshold=zero_threshold)
 
     def getDag(self):
-        return self.dag_embedding.dag
+        return self.dag_embedding.get_dag()
 
     def update_dual_param(self):
         with torch.no_grad():
             alpha = .1/self.d#self.c / self.d
-            lag_const = self.dag_embedding.dag.get_power_trace(alpha)
+            lag_const = self.dag_embedding.get_dag().get_power_trace(alpha)
             if self.dag_const > 0. and lag_const > self.tol:
                 self.lambd = self.lambd + self.c * lag_const
                 # Absolute does not make sense (but copied from DAG-GNN)
@@ -325,10 +338,10 @@ class DAGStep(nn.Module):
                     self.c *= self.eta
                 self.prev_trace = lag_const
             elif self.dag_const > 0:
-                self.dag_embedding.dag.post_process(1e-1)
+                self.dag_embedding.get_dag().post_process(1e-1)
                 self.dag_const = 0.
         return lag_const
 
     def set_h_threshold(self, threshold):
-        self.dag_embedding.dag.h_thresh = threshold
+        self.dag_embedding.get_dag().h_thresh = threshold
 

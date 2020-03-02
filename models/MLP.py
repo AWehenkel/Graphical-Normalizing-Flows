@@ -18,7 +18,7 @@ class MLP(nn.Module):
         layers.pop()
         self.net = nn.Sequential(*layers).to(device)
 
-    def forward(self, x):
+    def forward(self, x, context=None):
         return self.net(x)
 
     def to(self, device):
