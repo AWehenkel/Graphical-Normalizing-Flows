@@ -92,7 +92,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                       l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net)
         if nb_flow == 1:
             model = DAGStep(in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_net=emb_nets[0],
-                            device=device, l1_weight=l1, nb_steps=nb_steps, solver=solver)
+                            device=device, l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net)
             model.nets = [model]
 
     model.dag_const = 0.

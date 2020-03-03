@@ -236,7 +236,7 @@ class DAGNF(nn.Module):
 
     def set_h_threshold(self, threshold):
         for net in self.nets:
-            net.dag_embedding.dag.h_thresh = threshold
+            net.dag_embedding.get_dag().h_thresh = threshold
 
     def set_nb_steps(self, nb_steps):
         for net in self.nets:
