@@ -109,9 +109,9 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
         if not train and not umnn_maf:
             for net in model.nets:
-                net.dag_embedding.dag.stoch_gate = False
-                net.dag_embedding.dag.noise_gate = False
-                net.dag_embedding.dag.s_thresh = False
+                net.dag_embedding.get_dag().stoch_gate = False
+                net.dag_embedding.get_dag().noise_gate = False
+                net.dag_embedding.get_dag().s_thresh = False
 
 
     for epoch in range(nb_epoch):
@@ -196,7 +196,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                         'size': 12}
 
                 matplotlib.rc('font', **font)
-                A_normal = model.nets[0].dag_embedding.dag.soft_thresholded_A().detach().cpu().numpy().T
+                A_normal = model.nets[0].dag_embedding.get_dag().soft_thresholded_A().detach().cpu().numpy().T
                 logger.info(str(A_normal))
                 A_thresholded = A_normal * (A_normal > .001)
                 j = 0
