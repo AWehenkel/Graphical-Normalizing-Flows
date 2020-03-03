@@ -12,7 +12,7 @@ class IdentityNN(nn.Module):
 
 
 class DAGNN(nn.Module):
-    def __init__(self, d, device="cpu", soft_thresholding=True, h_thresh=0., net=None):
+    def __init__(self, d, device="cpu", soft_thresholding=True, h_thresh=0., net=None, gumble_T=1.):
         super().__init__()
         self.A = nn.Parameter(torch.ones(d, d, device=device)*1. + torch.randn((d, d), device=device)*.02)
         self.d = d
@@ -23,6 +23,7 @@ class DAGNN(nn.Module):
         self.noise_gate = False
         self.net = net if net is not None else IdentityNN()
         self.gumble = True
+        self.gumble_T = gumble_T
         with torch.no_grad():
             self.constrainA(h_thresh)
 
@@ -48,7 +49,7 @@ class DAGNN(nn.Module):
     def stochastic_gate(self, importance):
         if self.gumble:
             # Gumble soft-max gate
-            temp = 2.
+            temp = self.gumble_T
             epsilon = 1e-6
             g1 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
             g2 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
@@ -132,13 +133,14 @@ class DAGNN(nn.Module):
 
 
 class DAGEmbedding(nn.Module):
-    def __init__(self, in_d, emb_d=-1, emb_net=None, hiddens_integrand=[50, 50, 50, 50], act_func='ELU', device="cpu"):
+    def __init__(self, in_d, emb_d=-1, emb_net=None, hiddens_integrand=[50, 50, 50, 50], act_func='ELU', device="cpu",
+                 gumble_T=1.):
         super().__init__()
         self.m_embeding = None
         self.device = device
         self.in_d = in_d
         self.emb_d = in_d if emb_net is None else emb_d
-        self.dag = DAGNN(in_d, net=emb_net, device=device)
+        self.dag = DAGNN(in_d, net=emb_net, device=device, gumble_T=gumble_T)
         self.parallel_nets = IntegrandNetwork(in_d, 1 + in_d + self.emb_d, hiddens_integrand, 1, act_func=act_func,
                                               device=device)
 
@@ -264,15 +266,16 @@ class DAGNF(nn.Module):
 
 
 class DAGStep(nn.Module):
-    def __init__(self, in_d, hidden_integrand=[50, 50, 50], emb_net=None, emb_d=-1, act_func='ELU',
+    def __init__(self, in_d, hidden_integrand=[50, 50, 50], emb_net=None, emb_d=-1, act_func='ELU', gumble_T=1.,
                  nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1., linear_normalizer=False):
         super().__init__()
         self.linear_normalizer = linear_normalizer
         if linear_normalizer:
-            self.dag_embedding = DAGNN(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN())
+            self.dag_embedding = DAGNN(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
+                                       gumble_T=gumble_T)
             self.normalizer = LinearNormalizer(self.dag_embedding, emb_net, in_d, device=device)
         else:
-            self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device)
+            self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device, gumble_T=gumble_T)
             self.normalizer = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, device=device, solver=solver)
         self.lambd = .0
         self.c = 1e-3
