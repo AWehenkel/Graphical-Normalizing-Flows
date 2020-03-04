@@ -267,7 +267,7 @@ else:
     toys = [args.dataset]
 
 for toy in toys:
-    path = toy + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
+    path = toy + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else toy + "/" + args.folder
     if not(os.path.isdir(path)):
         os.makedirs(path)
     train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,

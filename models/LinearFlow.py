@@ -19,6 +19,7 @@ class LinearNormalizer(nn.Module):
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], torch.exp(trans[:, :, 1])
         z = x * sigma + mu
+        z.clamp_(-10., 10.)
         return z
 
     def compute_log_jac(self, x, context=None):
@@ -32,6 +33,7 @@ class LinearNormalizer(nn.Module):
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
         z = x * torch.exp(sigma) + mu
+        z.clamp_(-10., 10.)
         return z, sigma
 
     def compute_ll(self, x, context=None):
