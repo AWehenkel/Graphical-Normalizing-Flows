@@ -82,7 +82,7 @@ class DAGNN(nn.Module):
         if self.h_thresh > 0:
             if self.stoch_gate:
                 e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.stochastic_gate(self.hard_thresholded_A().unsqueeze(0)
-                 .expand(x.shape[0], -1, -1)) * (1 - torch.eye(x.shape[1]).unsqueeze(0).expand(x.shape[0], -1, -1)))\
+                 .expand(x.shape[0], -1, -1)) * (1 - torch.eye(x.shape[1], device=self.device).unsqueeze(0).expand(x.shape[0], -1, -1)))\
                     .view(x.shape[0] * self.d, -1)
             elif self.noise_gate:
                 e = self.noiser_gate(x.unsqueeze(1).expand(-1, self.d, -1),
