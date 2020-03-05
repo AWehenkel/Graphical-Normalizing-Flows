@@ -342,7 +342,7 @@ class DAGStep(nn.Module):
                     self.c *= self.eta
                 self.prev_trace = lag_const
             elif self.dag_const > 0:
-                self.dag_embedding.get_dag().post_process(1e-1)
+                self.dag_embedding.get_dag().post_process(1e-3)
                 self.dag_const = 0.
                 self.l1_weight = 0.
         return lag_const
