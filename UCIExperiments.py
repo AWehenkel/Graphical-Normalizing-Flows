@@ -176,6 +176,12 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                         format(epoch, ll_tot, ll_test, dagness, end-start))
 
         if epoch % 10 == 0 and not umnn_maf:
+            stoch_gate = model.getDag().stoch_gate
+            noise_gate = model.getDag().noise_gate
+            s_thresh = model.getDag().s_thresh
+            model.getDag().stoch_gate = False
+            model.getDag().noise_gate = False
+            model.getDag().s_thresh = False
             for threshold in [.1, .01, .0001, 1e-8]:
                 model.set_h_threshold(threshold)
                 # Valid loop
@@ -189,6 +195,9 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 dagness = model.DAGness() if nb_flow == 1 else max(model.DAGness())
                 logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
                             format(epoch, threshold, ll_test, dagness))
+            model.getDag().stoch_gate = stoch_gate
+            model.getDag().noise_gate = noise_gate
+            model.getDag().s_thresh = s_thresh
             model.set_h_threshold(0.)
 
         if epoch % nb_step_dual == 0:
@@ -270,7 +279,7 @@ else:
     toys = [args.dataset]
 
 for toy in toys:
-    path = toy + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else toy + "/" + args.folder
+    path = toy + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
     if not(os.path.isdir(path)):
         os.makedirs(path)
     train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
