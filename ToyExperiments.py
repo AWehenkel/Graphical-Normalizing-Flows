@@ -26,7 +26,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
     dim = x.shape[1]
     linear_net = True
-    nb_flow = 2
+    nb_flow = 1
     emb_net = [100, 100, 100, 2]
     emb_nets = []
     for i in range(nb_flow):
@@ -49,8 +49,11 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         opt.load_state_dict(torch.load(toy + '/ADAM.pt'))
         logger.info("Model loaded.")
 
-    model.getDag().stoch_gate = True
-    model.getDag().noise_gate = False
+    if True:
+        for net in model.nets:
+            net.getDag().stoch_gate = True
+            net.getDag().noise_gate = False
+            net.getDag().gumble_T = .5
     for epoch in range(nb_epoch):
         ll_tot = 0
         start = timer()
@@ -73,11 +76,11 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         ll_test = -ll_test.mean()
         dagness = max(model.DAGness())
         if dagness > 1e-15 and dagness < 1. and epoch > pre_heating_epochs:
-            model.l1_weight = .2
+            model.l1_weight = .1
             model.dag_const = 1.
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test.item(), dagness, end-start))
-        if epoch % 100 == 0:
+        if epoch % 1000 == 0:
             if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians"]:
                 def compute_ll_2spirals(x):
                     return model.compute_ll(torch.cat((x, torch.zeros(x.shape[0], dim-2).to(device)), 1))
@@ -96,39 +99,41 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
                     'size': 12}
 
             matplotlib.rc('font', **font)
-            A_normal = model.getDag().soft_thresholded_A().detach().cpu().numpy().T
-            logger.info(str(A_normal))
-            A_thresholded = A_normal * (A_normal > .001)
-            j = 0
-            for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
-                print(A)
-                #A /= A.sum() / np.log(dim)
+            for net in model.nets:
+                A_normal = net.getDag().soft_thresholded_A().detach().cpu().numpy().T
+                logger.info(str(A_normal))
+                A_thresholded = A_normal * (A_normal > .001)
+                j = 0
+                for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
+                    print(A)
+                    #A /= A.sum() / np.log(dim)
 
-                ax = plt.subplot(2, 2, 1 + j)
-                plt.title(name + " DAG")
-                G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-                pos = nx.layout.spring_layout(G)
-                nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
-                edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-                nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
-                                               arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                               edge_cmap=plt.cm.Blues, width=5*weights)
-                labels = {}
-                for i in range(dim):
-                    labels[i] = str(r'$%d$' % i)
-                nx.draw_networkx_labels(G, pos, labels, font_size=12)
+                    ax = plt.subplot(2, 2, 1 + j)
+                    plt.title(name + " DAG")
+                    G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
+                    pos = nx.layout.spring_layout(G)
+                    nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
+                    if nx.get_edge_attributes(G, 'weight').items() is not None:
+                        edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
+                    nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
+                                                   arrowsize=3, connectionstyle='arc3,rad=0.2',
+                                                   edge_cmap=plt.cm.Blues, width=5*weights)
+                    labels = {}
+                    for i in range(dim):
+                        labels[i] = str(r'$%d$' % i)
+                    nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
-                ax = plt.subplot(2, 2, 2 + j)
-                out = ax.matshow(np.log(A))
-                plt.colorbar(out, ax=ax)
-                j += 2
+                    ax = plt.subplot(2, 2, 2 + j)
+                    out = ax.matshow(np.log(A))
+                    plt.colorbar(out, ax=ax)
+                    j += 2
 
-            #vf.plt_flow(model.compute_ll, ax)
-            plt.savefig("%s%s/DAG_%d.pdf" % (folder, toy, epoch))
-            torch.save(model.state_dict(), folder + toy + '/model.pt')
-            torch.save(opt.state_dict(), folder + toy + '/ADAM.pt')
-            G.clear()
-            plt.clf()
+                #vf.plt_flow(model.compute_ll, ax)
+                plt.savefig("%s%s/DAG_%d.pdf" % (folder, toy, epoch))
+                torch.save(model.state_dict(), folder + toy + '/model.pt')
+                torch.save(opt.state_dict(), folder + toy + '/ADAM.pt')
+                G.clear()
+                plt.clf()
 
 
 toy = "2spirals-8gaussians"

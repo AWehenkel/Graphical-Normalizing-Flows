@@ -35,10 +35,10 @@ def inf_train_gen(data, rng=None, batch_size=200):
         data2 = inf_train_gen("8gaussians", rng=rng, batch_size=batch_size)
         data3 = inf_train_gen("swissroll", rng=rng, batch_size=batch_size)
         data4 = inf_train_gen("circles", rng=rng, batch_size=batch_size)
-        data5 = inf_train_gen("moons", rng=rng, batch_size=batch_size)
+        data8 = inf_train_gen("moons", rng=rng, batch_size=batch_size)
         data6 = inf_train_gen("pinwheel", rng=rng, batch_size=batch_size)
         data7 = inf_train_gen("checkerboard", rng=rng, batch_size=batch_size)
-        data8 = inf_train_gen("line", rng=rng, batch_size=batch_size)
+        data5 = inf_train_gen("line", rng=rng, batch_size=batch_size)
         std = np.array([1.604934 , 1.584863 , 2.0310535, 2.0305095, 1.337718 , 1.4043778,  1.6944685, 1.6935346,
                         1.7434783, 1.0092416, 1.4860426, 1.485661 , 2.3067558, 2.311637 , 1.4430547, 1.4430547], dtype=np.float32)
         data = np.concatenate([data1, data2, data3, data4, data5, data6, data7, data8], axis=1)

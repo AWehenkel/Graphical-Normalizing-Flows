@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from UMNN import IntegrandNetwork, UMNNMAF
-from .LinearFlow import LinearNormalizer
+from .LinearFlow import LinearNormalizer, CubicNormalizer
 
 class IdentityNN(nn.Module):
     def __init__(self):
@@ -14,7 +14,7 @@ class IdentityNN(nn.Module):
 class DAGNN(nn.Module):
     def __init__(self, d, device="cpu", soft_thresholding=True, h_thresh=0., net=None, gumble_T=1.):
         super().__init__()
-        self.A = nn.Parameter(torch.ones(d, d, device=device)*.5 + torch.randn((d, d), device=device)*.02)
+        self.A = nn.Parameter(torch.ones(d, d, device=device)*1.5 + torch.randn((d, d), device=device)*.02)
         self.d = d
         self.device = device
         self.s_thresh = soft_thresholding
@@ -268,13 +268,17 @@ class DAGNF(nn.Module):
 
 class DAGStep(nn.Module):
     def __init__(self, in_d, hidden_integrand=[50, 50, 50], emb_net=None, emb_d=-1, act_func='ELU', gumble_T=1.,
-                 nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1., linear_normalizer=False):
+                 nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1., linear_normalizer=False, cubic_normalize=False):
         super().__init__()
         self.linear_normalizer = linear_normalizer
         if linear_normalizer:
             self.dag_embedding = DAGNN(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
                                        gumble_T=gumble_T)
             self.normalizer = LinearNormalizer(self.dag_embedding, emb_net, in_d, device=device)
+        elif cubic_normalize:
+            self.dag_embedding = DAGNN(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
+                                       gumble_T=gumble_T)
+            self.normalizer = CubicNormalizer(self.dag_embedding, emb_net, in_d, device=device)
         else:
             self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device, gumble_T=gumble_T)
             self.normalizer = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, device=device, solver=solver)
@@ -342,9 +346,10 @@ class DAGStep(nn.Module):
                     self.c *= self.eta
                 self.prev_trace = lag_const
             elif self.dag_const > 0:
-                self.dag_embedding.get_dag().post_process(1e-3)
-                self.dag_const = 0.
-                self.l1_weight = 0.
+                #self.dag_embedding.get_dag().post_process(1e-3)
+                #self.dag_const = 0.
+                #self.l1_weight = 0.
+                print("DAGness is very low: %f" % torch.log(lag_const), flush=True)
         return lag_const
 
     def set_h_threshold(self, threshold):
