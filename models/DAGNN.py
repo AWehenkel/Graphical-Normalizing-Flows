@@ -291,6 +291,9 @@ class DAGStep(nn.Module):
         self.tol = 1e-20
         self.l1_weight = l1_weight
         self.dag_const = 1.
+        _, S, _ = torch.svd(self.dag_embedding.get_dag().A)
+        sigma_max = S.max().item()
+        self.alpha = 1. / sigma_max ** 2
 
     def to(self, device):
         self.dag_embedding.to(device)
@@ -312,7 +315,7 @@ class DAGStep(nn.Module):
         return self.normalizer.compute_ll(x)
 
     def DAGness(self):
-        alpha = .1 / self.d
+        alpha = self.alpha#.1 / self.d
         return self.dag_embedding.get_dag().get_power_trace(alpha)
 
     def loss(self, x, only_jac=False):
@@ -337,7 +340,11 @@ class DAGStep(nn.Module):
 
     def update_dual_param(self):
         with torch.no_grad():
-            alpha = .1/self.d#self.c / self.d
+            _, S, _ = torch.svd(self.dag_embedding.get_dag().A)
+            sigma_max = S.max().item()
+            self.alpha = 1./sigma_max**2
+            alpha = self.alpha
+            #alpha = .1/self.d#self.c / self.d
             lag_const = self.dag_embedding.get_dag().get_power_trace(alpha)
             if self.dag_const > 0. and lag_const > self.tol:
                 self.lambd = self.lambd + self.c * lag_const
