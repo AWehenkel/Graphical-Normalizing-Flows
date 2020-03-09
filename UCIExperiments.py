@@ -176,14 +176,18 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                         format(epoch, ll_tot, ll_test, dagness, end-start))
 
         if epoch % 10 == 0 and not umnn_maf:
-            stoch_gate = model.getDag().stoch_gate
-            noise_gate = model.getDag().noise_gate
-            s_thresh = model.getDag().s_thresh
-            model.getDag().stoch_gate = False
-            model.getDag().noise_gate = False
-            model.getDag().s_thresh = False
-            for threshold in [.1, .01, .0001, 1e-8]:
-                model.set_h_threshold(threshold)
+            stoch_gate, noise_gate, s_thresh = [], [], []
+
+            for net in model.nets:
+                stoch_gate.append(net.getDag().stoch_gate)
+                noise_gate.append(net.getDag().noise_gate)
+                s_thresh.append(net.getDag().s_thresh)
+                net.getDag().stoch_gate = False
+                net.getDag().noise_gate = False
+                net.getDag().s_thresh = True
+            for threshold in [.95, .5, .1, .01, .0001]:
+                for net in model.nets:
+                    net.getDag().set_h_threshold(threshold)
                 # Valid loop
                 ll_test = 0.
                 i = 0.
@@ -195,10 +199,13 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 dagness = model.DAGness() if nb_flow == 1 else max(model.DAGness())
                 logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
                             format(epoch, threshold, ll_test, dagness))
-            model.getDag().stoch_gate = stoch_gate
-            model.getDag().noise_gate = noise_gate
-            model.getDag().s_thresh = s_thresh
-            model.set_h_threshold(0.)
+            i = 0
+            for net in model.nets:
+                net.getDag().stoch_gate = stoch_gate[i]
+                net.getDag().noise_gate = noise_gate[i]
+                net.getDag().s_thresh = s_thresh[i]
+                net.set_h_threshold(0.)
+                i += 1
 
         if epoch % nb_step_dual == 0:
 

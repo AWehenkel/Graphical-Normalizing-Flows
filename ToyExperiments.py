@@ -75,11 +75,35 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         ll_test, _ = model.compute_ll(x_test)
         ll_test = -ll_test.mean()
         dagness = max(model.DAGness())
-        if dagness > 1e-15 and dagness < 1. and epoch > pre_heating_epochs:
+        if epoch > pre_heating_epochs:
             model.l1_weight = .5
             model.dag_const = 1.
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test.item(), dagness, end-start))
+
+
+        if epoch % 100 == 0:
+            with torch.no_grad():
+                stoch_gate = model.getDag().stoch_gate
+                noise_gate = model.getDag().noise_gate
+                s_thresh = model.getDag().s_thresh
+                model.getDag().stoch_gate = False
+                model.getDag().noise_gate = False
+                model.getDag().s_thresh = True
+                for threshold in [.95, .1, .01, .0001, 1e-8]:
+                    model.set_h_threshold(threshold)
+                    # Valid loop
+                    ll_test, _ = model.compute_ll(x_test)
+                    ll_test = -ll_test.mean().item()
+                    dagness = max(model.DAGness()).item()
+                    logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
+                                format(epoch, threshold, ll_test, dagness))
+                model.getDag().stoch_gate = stoch_gate
+                model.getDag().noise_gate = noise_gate
+                model.getDag().s_thresh = s_thresh
+                model.set_h_threshold(0.)
+
+
         if epoch % 1000 == 0:
             if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians"]:
                 def compute_ll_2spirals(x):
@@ -101,11 +125,10 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
             matplotlib.rc('font', **font)
             for net in model.nets:
                 A_normal = net.getDag().soft_thresholded_A().detach().cpu().numpy().T
-                logger.info(str(A_normal))
+                #logger.info(str(A_normal))
                 A_thresholded = A_normal * (A_normal > .001)
                 j = 0
                 for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
-                    print(A)
                     #A /= A.sum() / np.log(dim)
 
                     ax = plt.subplot(2, 2, 1 + j)
