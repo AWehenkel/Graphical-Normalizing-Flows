@@ -171,7 +171,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 "epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                 format(epoch, ll_tot, ll_test, end - start))
         else:
-            dagness = model.DAGness() if nb_flow == 1 else max(model.DAGness())
+            dagness = max(model.DAGness())
             logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                         format(epoch, ll_tot, ll_test, dagness, end-start))
 
@@ -195,7 +195,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     ll_test += ll.mean().item()
                     i += 1
                 ll_test /= i
-                dagness = model.DAGness() if nb_flow == 1 else max(model.DAGness())
+                dagness = max(model.DAGness())
                 logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
                             format(epoch, threshold, ll_test, dagness))
             i = 0
