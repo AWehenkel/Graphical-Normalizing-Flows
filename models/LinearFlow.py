@@ -18,6 +18,8 @@ class LinearNormalizer(nn.Module):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], torch.exp(trans[:, :, 1])
+        sigma.clamp_(-5., 2.)
+        mu.clamp_(-5., 5.)
         #sigma.clamp_(-3., 3.)
         z = x * sigma + mu
         #z.clamp_(-10., 10.)
@@ -27,6 +29,8 @@ class LinearNormalizer(nn.Module):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
+        sigma.clamp_(-5., 2.)
+        mu.clamp_(-5., 5.)
         #sigma.clamp_(-3., 3.)
         return sigma
 
@@ -34,8 +38,10 @@ class LinearNormalizer(nn.Module):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
-        #sigma.clamp_(-3., 3.)
+        sigma.clamp_(-5., 2.)
+        mu.clamp_(-5., 5.)
         z = x * torch.exp(sigma) + mu
+        #print(z.max(), "-", sigma.max(), "-", mu.max())
         #z.clamp_(-10., 10.)
         return z, sigma
 
@@ -43,6 +49,8 @@ class LinearNormalizer(nn.Module):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
+        sigma.clamp_(-5., 2.)
+        mu.clamp_(-5., 5.)
         #sigma.clamp_(-3., 3.)
         z = x * torch.exp(sigma) + mu
 
@@ -56,6 +64,8 @@ class LinearNormalizer(nn.Module):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
+        sigma.clamp_(-5., 2.)
+        mu.clamp_(-5., 5.)
         #sigma.clamp_(-3., 3.)
         z = x * torch.exp(sigma) + mu
 

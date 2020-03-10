@@ -8,6 +8,7 @@ import lib.visualize_flow as vf
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+import math
 import matplotlib
 
 
@@ -26,7 +27,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
     dim = x.shape[1]
     linear_net = True
-    nb_flow = 1
+    nb_flow = 10
     emb_net = [100, 100, 100, 2]
     emb_nets = []
     for i in range(nb_flow):
@@ -39,7 +40,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=emb_nets[0].out_d, emb_nets=emb_nets, device=device,
                   l1_weight=l1, nb_steps=nb_steps, linear_normalizer=linear_net)
     model.dag_const = 0.
-    opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
+    opt = torch.optim.Adam(model.parameters(), 1e-2, weight_decay=1e-5)
     #opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
 
     if load:
@@ -61,6 +62,12 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
             cur_x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=batch_size)).to(device)
             loss = model.loss(cur_x)
             ll_tot += loss.item()
+            if math.isnan(loss.item()):
+                ll, z = model.compute_ll(cur_x)
+                print(ll)
+                print(z)
+                print(ll.max(), z.max())
+                exit()
             opt.zero_grad()
             loss.backward(retain_graph=True)
             opt.step()
@@ -76,8 +83,9 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         ll_test = -ll_test.mean()
         dagness = max(model.DAGness())
         if epoch > pre_heating_epochs:
-            model.l1_weight = .5
-            model.dag_const = 1.
+            for net in model.nets:
+                net.l1_weight = 1.
+                net.dag_const = 1.
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test.item(), dagness, end-start))
 
