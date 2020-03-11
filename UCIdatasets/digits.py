@@ -67,6 +67,3 @@ def load_data_normalised():
     data_test = (data_test - mu) / s
 
     return data_train, data_validate, data_test
-
-data_train, data_validate, data_test = load_data_normalised()
-print(data_train.mean(0), data_train.std(0))

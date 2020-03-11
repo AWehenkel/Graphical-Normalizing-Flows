@@ -28,7 +28,7 @@ class MLP(nn.Module):
 
 
 class MNISTCNN(nn.Module):
-    def __init__(self, out_d=10):
+    def __init__(self, out_d=10, device="cpu"):
         super(MNISTCNN, self).__init__()
         self.conv1 = nn.Conv2d(1, 16, 3, 1)
         self.conv2 = nn.Conv2d(16, 16, 3, 1)
@@ -37,6 +37,7 @@ class MNISTCNN(nn.Module):
         self.fc1 = nn.Linear(2304, 128)
         self.fc2 = nn.Linear(128, out_d)
         self.out_d = out_d
+        self.device = device
 
     def forward(self, x):
         x = self.conv1(x.view(-1, 1, 28, 28))
@@ -45,11 +46,18 @@ class MNISTCNN(nn.Module):
         x = F.max_pool2d(x, 2)
         x = self.dropout1(x)
         x = torch.flatten(x, 1)
-        print(x.shape)
         x = self.fc1(x)
         x = F.relu(x)
         x = self.dropout2(x)
         x = self.fc2(x)
         return x
 
-
+    def to(self, device):
+        self.conv1.to(device)
+        self.conv2.to(device)
+        self.dropout1.to(device)
+        self.dropout2.to(device)
+        self.fc1.to(device)
+        self.fc2.to(device)
+        self.device = device
+        return self

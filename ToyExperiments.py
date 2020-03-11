@@ -27,7 +27,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
     dim = x.shape[1]
     linear_net = True
-    nb_flow = 10
+    nb_flow = 1
     emb_net = [100, 100, 100, 2]
     emb_nets = []
     for i in range(nb_flow):
@@ -84,7 +84,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         dagness = max(model.DAGness())
         if epoch > pre_heating_epochs:
             for net in model.nets:
-                net.l1_weight = 1.
+                net.l1_weight = .0
                 net.dag_const = 1.
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, ll_tot, ll_test.item(), dagness, end-start))
@@ -172,14 +172,14 @@ toy = "2spirals-8gaussians"
 import argparse
 datasets = ["8gaussians", "swissroll", "moons", "pinwheel", "cos", "2spirals", "checkerboard", "line", "line-noisy",
             "circles", "joint_gaussian", "2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians",
-            "8-MIX"]
+            "8-MIX", "7-MIX"]
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy problem ?")
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=50, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
-parser.add_argument("-l1", default=.5, type=float, help="Maximum weight for l1 regularization")
+parser.add_argument("-l1", default=.0, type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs")
 
 args = parser.parse_args()

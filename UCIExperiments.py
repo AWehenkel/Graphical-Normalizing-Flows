@@ -51,7 +51,8 @@ def load_data(name):
 
 def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000,
           int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, min_pre_heating_epochs=30,
-          all_args=None, file_number=None, train=True, solver="CC", nb_flow=1, linear_net=False, gumble_T=1.):
+          all_args=None, file_number=None, train=True, solver="CC", nb_flow=1, linear_net=False, gumble_T=1.,
+          weight_decay=1e-5):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -97,7 +98,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         #    model.nets = [model]
     if min_pre_heating_epochs > 0:
         model.dag_const = 0.
-    opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
+    opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=weight_decay)
     # opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
     if not umnn_maf and train:
         for net in model.nets:
@@ -273,6 +274,7 @@ parser.add_argument("-nb_flow", type=int, default=1, help="Number of steps in th
 parser.add_argument("-test", default=False, action="store_true")
 parser.add_argument("-linear_net", default=False, action="store_true")
 parser.add_argument("-gumble_T", default=1., type=float, help="Temperature of the gumble distribution.")
+parser.add_argument("-weight_decay", default=1e-5, type=float, help="Weight decay value")
 
 
 args = parser.parse_args()
@@ -292,4 +294,4 @@ for toy in toys:
           int_net=args.int_net, emb_net=args.emb_net, b_size=args.b_size, all_args=args, umnn_maf=args.UMNN_MAF,
           nb_steps=args.nb_steps, min_pre_heating_epochs=args.min_pre_heating_epochs, file_number=args.f_number,
           solver=args.solver, nb_flow=args.nb_flow, train=not args.test, linear_net=args.linear_net,
-          gumble_T=args.gumble_T)
+          gumble_T=args.gumble_T, weight_decay=args.weight_decay)
