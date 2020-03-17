@@ -26,7 +26,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    linear_net = True
+    linear_net = False
     nb_flow = 1
     emb_net = [100, 100, 100, 2]
     emb_nets = []

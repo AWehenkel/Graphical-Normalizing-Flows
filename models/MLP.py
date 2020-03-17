@@ -39,7 +39,7 @@ class MNISTCNN(nn.Module):
         self.out_d = out_d
         self.device = device
 
-    def forward(self, x):
+    def forward(self, x, context=None):
         x = self.conv1(x.view(-1, 1, 28, 28))
         x = F.relu(x)
         x = self.conv2(x)

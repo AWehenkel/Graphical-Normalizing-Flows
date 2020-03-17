@@ -115,7 +115,6 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 net.dag_embedding.get_dag().noise_gate = False
                 net.dag_embedding.get_dag().s_thresh = False
 
-
     for epoch in range(nb_epoch):
         ll_tot = 0
         start = timer()
