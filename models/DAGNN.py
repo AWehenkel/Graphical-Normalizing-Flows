@@ -324,7 +324,7 @@ class DAGStep(nn.Module):
             ll = ll.sum(1)
         else:
             ll, _ = self.normalizer.compute_ll(x)
-        alpha = .1/self.d
+        alpha = self.alpha
         lag_const = self.dag_embedding.get_dag().get_power_trace(alpha)
         loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) - ll.mean() + \
                self.l1_weight*self.dag_embedding.get_dag().A.abs().mean()

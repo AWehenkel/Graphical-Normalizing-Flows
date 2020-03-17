@@ -76,7 +76,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
     emb_nets = []
     for i in range(nb_flow):
         if emb_net is not None:
-            net = MNISTCNN()
+            net = MNISTCNN(out_d=emb_net[-1]).to(device)
         else:
             net = None
         emb_nets.append(net)
@@ -135,10 +135,12 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         # Training loop
         if train:
             for batch_idx, (cur_x, target) in enumerate(train_loader):
-                cur_x = cur_x.view(-1, dim).float()
+                cur_x = cur_x.view(-1, dim).float().to(device)
                 model.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
                 loss = model.loss(cur_x) if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
                 if math.isnan(loss.item()):
+                    print("ici")
+                    print(loss.item())
                     print(model.compute_ll(cur_x))
                     exit()
                 ll_tot += loss.item()
@@ -157,7 +159,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         with torch.no_grad():
             model.set_steps_nb(nb_steps + 20)
             for batch_idx, (cur_x, target) in enumerate(valid_loader):
-                cur_x = cur_x.view(-1, dim).float()
+                cur_x = cur_x.view(-1, dim).float().to(device)
                 ll, _ = model.compute_ll(cur_x)
                 ll_test += ll.mean().item()
                 i += 1
@@ -257,11 +259,11 @@ parser.add_argument("-load", default=False, action="store_true", help="Load a mo
 parser.add_argument("-folder", default="", help="Folder")
 parser.add_argument("-nb_steps_dual", default=100, type=int,
                     help="number of step between updating Acyclicity constraint and sparsity constraint")
-parser.add_argument("-l1", default=.2, type=float, help="Maximum weight for l1 regularization")
+parser.add_argument("-l1", default=10., type=float, help="Maximum weight for l1 regularization")
 parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
-parser.add_argument("-b_size", default=100, type=int, help="Batch size")
+parser.add_argument("-b_size", default=2, type=int, help="Batch size")
 parser.add_argument("-int_net", default=[100, 100, 100, 100], nargs="+", type=int, help="NN hidden layers of UMNN")
-parser.add_argument("-emb_net", default=[100, 100, 100, 10], nargs="+", type=int, help="NN layers of embedding")
+parser.add_argument("-emb_net", default=[100, 100, 100, 2], nargs="+", type=int, help="NN layers of embedding")
 parser.add_argument("-UMNN_MAF", default=False, action="store_true", help="replace the DAG-NF by a UMNN-MAF")
 parser.add_argument("-nb_steps", default=20, type=int, help="Number of integration steps.")
 parser.add_argument("-min_pre_heating_epochs", default=30, type=int, help="Number of heating steps.")
@@ -278,6 +280,7 @@ parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight dec
 args = parser.parse_args()
 from datetime import datetime
 now = datetime.now()
+args.linear_net = True
 
 
 

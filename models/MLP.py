@@ -40,6 +40,7 @@ class MNISTCNN(nn.Module):
         self.device = device
 
     def forward(self, x, context=None):
+        b_size = x.shape[0]
         x = self.conv1(x.view(-1, 1, 28, 28))
         x = F.relu(x)
         x = self.conv2(x)
@@ -49,7 +50,7 @@ class MNISTCNN(nn.Module):
         x = self.fc1(x)
         x = F.relu(x)
         x = self.dropout2(x)
-        x = self.fc2(x)
+        x = self.fc2(x).view(b_size, -1)
         return x
 
     def to(self, device):
