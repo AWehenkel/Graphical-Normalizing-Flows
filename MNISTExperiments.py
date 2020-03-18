@@ -192,7 +192,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 ll_test = 0.
                 i = 0.
                 for batch_idx, (cur_x, target) in enumerate(valid_loader):
-                    cur_x = cur_x.view(-1, dim).float()
+                    cur_x = cur_x.view(-1, dim).float().to(device)
                     ll, _ = model.compute_ll(cur_x)
                     ll_test += ll.mean().item()
                     i += 1
@@ -280,9 +280,6 @@ parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight dec
 args = parser.parse_args()
 from datetime import datetime
 now = datetime.now()
-args.linear_net = True
-
-
 
 path =  "MNIST/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
 if not (os.path.isdir(path)):

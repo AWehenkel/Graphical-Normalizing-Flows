@@ -44,7 +44,8 @@ def load_data(name):
 
     elif name == "digits":
         return UCIdatasets.DIGITS()
-
+    elif name == "proteins":
+        return UCIdatasets.PROTEINS()
     else:
         raise ValueError('Unknown dataset')
 
@@ -251,7 +252,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         torch.save(opt.state_dict(), path + '/ADAM.pt')
 
 import argparse
-datasets = ["power", "gas", "bsds300", "miniboone", "hepmass", "digits"]
+datasets = ["power", "gas", "bsds300", "miniboone", "hepmass", "digits", "proteins"]
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy problem ?")
