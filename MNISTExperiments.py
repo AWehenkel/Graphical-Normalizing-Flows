@@ -127,7 +127,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
             for net in model.nets:
                 dagness = net.DAGness()
                 if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
-                    net.l1_weight = .1
+                    #net.l1_weight = .1
                     net.dag_const = 1.
                     logger.info("Dagness constraint set on.")
 
@@ -209,43 +209,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 i += 1
 
         if epoch % nb_step_dual == 0:
-
-            if not umnn_maf:
-                # Plot DAG
-                font = {'family': 'normal',
-                        'weight': 'bold',
-                        'size': 12}
-
-                matplotlib.rc('font', **font)
-                A_normal = model.nets[0].dag_embedding.get_dag().soft_thresholded_A().detach().cpu().numpy().T
-                logger.info(str(A_normal))
-                A_thresholded = A_normal * (A_normal > .001)
-                j = 0
-                for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
-                    A /= A.sum() / np.log(dim)
-                    ax = plt.subplot(2, 2, 1 + j)
-                    plt.title(name + " DAG")
-                    G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-                    pos = nx.layout.spring_layout(G)
-                    nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
-                    edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-                    nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
-                                           arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                           edge_cmap=plt.cm.Blues, width=5 * weights)
-                    labels = {}
-                    for i in range(dim):
-                        labels[i] = str(r'$%d$' % i)
-                    nx.draw_networkx_labels(G, pos, labels, font_size=12)
-
-                    ax = plt.subplot(2, 2, 2 + j)
-                    out = ax.matshow(np.log(A))
-                    plt.colorbar(out, ax=ax)
-                    j += 2
-                    # vf.plt_flow(model.compute_ll, ax)
-                plt.savefig("%s/DAG_%d.pdf" % (path, epoch))
-                G.clear()
-                plt.clf()
-
+            logger.info("Saving model N°%d" % epoch)
             torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
             torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % epoch)
 
@@ -276,6 +240,7 @@ parser.add_argument("-linear_net", default=False, action="store_true")
 parser.add_argument("-gumble_T", default=1., type=float, help="Temperature of the gumble distribution.")
 parser.add_argument("-weight_decay", default=1e-5, type=float, help="Weight decay value")
 parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight decay value")
+parser.add_argument("-hutchinson", default=0, type=int, help="Use a hutchinson trace estimator if non null")
 
 args = parser.parse_args()
 from datetime import datetime
@@ -288,4 +253,4 @@ train(load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb
       int_net=args.int_net, emb_net=args.emb_net, b_size=args.b_size, all_args=args, umnn_maf=args.UMNN_MAF,
       nb_steps=args.nb_steps, min_pre_heating_epochs=args.min_pre_heating_epochs, file_number=args.f_number,
       solver=args.solver, nb_flow=args.nb_flow, train=not args.test, linear_net=args.linear_net,
-      gumble_T=args.gumble_T, weight_decay=args.weight_decay, learning_rate=args.learning_rate)
+      gumble_T=args.gumble_T, weight_decay=args.weight_decay, learning_rate=args.learning_rate, hutchinson=args.hutchinson)

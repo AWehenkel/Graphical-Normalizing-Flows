@@ -21,6 +21,45 @@ class PROTEINS:
         self.n_dims = self.trn.x.shape[1]
 
 
+def get_shd(A):
+    A_true = get_adj_matrix()
+    return np.abs(A - A_true).sum()
+
+
+def get_adj_matrix():
+    A = np.zeros(11, 11)
+    # PKC Children
+    A[8, 1] = 1
+    A[8, 9] = 1
+    A[8, 10] = 1
+    A[8, 7] = 1
+    A[8, 0] = 1
+    # PKA Children
+    A[7, 1] = 1
+    A[7, 9] = 1
+    A[7, 10] = 1
+    A[7, 5] = 1
+    A[7, 0] = 1
+    A[7, 6] = 1
+    # RAF Child
+    A[0, 1] = 1
+    # MEK Child
+    A[1, 5] = 1
+    # P44/42 Child
+    A[5, 6] = 1
+    #PlcGamma Children
+    A[2, 3] = 1
+    A[2, 4] = 1
+    A[2, 8] = 1
+    #PIP3 Children
+    A[4, 3] = 1
+    A[4, 6] = 1
+    #PIP2 Child
+    A[3, 8] = 1
+
+
+
+
 def load_data():
     dir_f = "Datasets/Human_Protein_Network/"
     train = torch.load(dir_f + "X_train.pkt")

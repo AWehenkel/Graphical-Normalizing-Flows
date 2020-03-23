@@ -132,7 +132,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             for net in model.nets:
                 dagness = net.DAGness()
                 if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
-                    net.l1_weight = .1
+                    #net.l1_weight = .1
                     net.dag_const = 1.
                     logger.info("Dagness constraint set on.")
 
@@ -241,6 +241,8 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     plt.colorbar(out, ax=ax)
                     j += 2
                     # vf.plt_flow(model.compute_ll, ax)
+                if dataset == "proteins":
+                    logger.info("SHD: %d" % UCIdatasets.get_shd(A > 1e-3))
                 plt.savefig("%s/DAG_%d.pdf" % (path, epoch))
                 G.clear()
                 plt.clf()
