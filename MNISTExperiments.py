@@ -74,16 +74,23 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
     dim = 28**2
 
     emb_nets = []
+
+    # Fixed for test
+    nb_flow = 3
+    img_sizes = [[28, 28], [14, 14], [7, 7]]
+    dropping_factors = [[2, 2], [2, 2]]
+    fc_l = [[2304, 128], [400, 64], [16, 16]]
+
     for i in range(nb_flow):
         if emb_net is not None:
-            net = MNISTCNN(out_d=emb_net[-1]).to(device)
+            net = MNISTCNN(out_d=emb_net[-1], fc_l=fc_l[i], size_img=img_sizes[i]).to(device)
         else:
             net = None
         emb_nets.append(net)
     l1_weight = l1
     model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_nets=emb_nets,
                   device=device, l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net,
-                  gumble_T=gumble_T, hutchinson=hutchinson)
+                  gumble_T=gumble_T, hutchinson=hutchinson, dropping_factors=dropping_factors, img_sizes=img_sizes)
 
     if min_pre_heating_epochs > 0:
         model.dag_const = 0.

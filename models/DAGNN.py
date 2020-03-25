@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from UMNN import IntegrandNetwork, UMNNMAF
 from .LinearFlow import LinearNormalizer, CubicNormalizer
+import math
 
 class IdentityNN(nn.Module):
     def __init__(self):
@@ -199,12 +200,17 @@ class ListModule(object):
 
 
 class DAGNF(nn.Module):
-    def __init__(self, emb_nets, nb_flow=1, **kwargs):
+    def __init__(self, emb_nets, in_d, nb_flow=1, dropping_factors=None, img_sizes=None, **kwargs):
         super().__init__()
         self.device = kwargs['device']
         self.nets = ListModule(self, "DAGFlow")
+        self.dropping_factors = dropping_factors
+        self.img_sizes = img_sizes
+        self.pi = torch.tensor(math.pi).float()
         for i in range(nb_flow):
-            model = DAGStep(emb_net=emb_nets[i], **kwargs)
+            dim_in = in_d if self.dropping_factors is None else img_sizes[i][0]*img_sizes[i][1]
+            print(dim_in)
+            model = DAGStep(emb_net=emb_nets[i], in_d=dim_in, **kwargs)
             self.nets.append(model)
 
     def to(self, device):
@@ -221,12 +227,33 @@ class DAGNF(nn.Module):
         return x
 
     def compute_ll(self, x):
+        if self.dropping_factors is not None:
+            return self.compute_ll_drop(x)
         jac_tot = 0.
         if len(self.nets) > 1:
             for id_net in range(len(self.nets) -1):
                 net = self.nets[id_net]
                 x, jac = net.compute_log_jac(x)
                 jac_tot += jac.sum(1)
+        ll, z = self.nets[-1].compute_ll(x)
+        ll += jac_tot
+        return ll, z
+
+    def compute_ll_drop(self, x):
+        jac_tot = 0.
+        if len(self.nets) > 1:
+            for id_net in range(len(self.nets) -1):
+                net = self.nets[id_net]
+                x, jac = net.compute_log_jac(x)
+                dropping = self.dropping_factors[id_net]
+                H, W = self.img_sizes[id_net][0], self.img_sizes[id_net][1]
+                h, w = self.img_sizes[id_net+1][0], self.img_sizes[id_net+1][1]
+                z = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(1, dropping[1], dropping[1]) \
+                        .contiguous().view(1, h, w, -1)[:, :, :, 1:].view(x.shape[0], -1)
+                x = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(1, dropping[1], dropping[1]) \
+                        .contiguous().view(1, h, w, -1)[:, :, :, 0].view(x.shape[0], -1)
+                log_prob_gauss = -.5 * (torch.log(self.pi * 2) + z ** 2).sum(1)
+                jac_tot += jac.sum(1) + log_prob_gauss
         ll, z = self.nets[-1].compute_ll(x)
         ll += jac_tot
         return ll, z
@@ -246,12 +273,32 @@ class DAGNF(nn.Module):
             net.set_steps_nb(nb_steps)
 
     def loss(self, x):
+        if self.dropping_factors is not None:
+            return self.loss_drop(x)
         loss_tot = 0.
         if len(self.nets) > 1:
             for id_net in range(len(self.nets) - 1):
                 net = self.nets[id_net]
                 x, loss = net.loss(x, only_jac=True)
                 loss_tot += loss
+        return loss_tot + self.nets[-1].loss(x)
+
+    def loss_drop(self, x):
+        loss_tot = 0.
+        if len(self.nets) > 1:
+            for id_net in range(len(self.nets) - 1):
+                net = self.nets[id_net]
+                b_size = x.shape[0]
+                x, loss = net.loss(x, only_jac=True)
+                dropping = self.dropping_factors[id_net]
+                H, W = self.img_sizes[id_net][0], self.img_sizes[id_net][1]
+                h, w = self.img_sizes[id_net + 1][0], self.img_sizes[id_net + 1][1]
+                z = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
+                        .contiguous().view(b_size, h, w, -1)[:, :, :, 1:].contiguous().view(b_size, -1)
+                x = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
+                        .contiguous().view(b_size, h, w, -1)[:, :, :, 0].contiguous().view(b_size, -1)
+                log_prob_gauss = -.5 * (torch.log(self.pi * 2) + z ** 2).sum(1)
+                loss_tot += loss + log_prob_gauss.mean(0)
         return loss_tot + self.nets[-1].loss(x)
 
     def constrainA(self, zero_threshold):

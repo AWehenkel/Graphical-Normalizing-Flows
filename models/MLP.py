@@ -28,20 +28,21 @@ class MLP(nn.Module):
 
 
 class MNISTCNN(nn.Module):
-    def __init__(self, out_d=10, device="cpu"):
+    def __init__(self, out_d=10, device="cpu", fc_l=[2304, 128], size_img=[28, 28]):
         super(MNISTCNN, self).__init__()
         self.conv1 = nn.Conv2d(1, 16, 3, 1)
         self.conv2 = nn.Conv2d(16, 16, 3, 1)
         self.dropout1 = nn.Dropout2d(0.25)
         self.dropout2 = nn.Dropout2d(0.5)
-        self.fc1 = nn.Linear(2304, 128)
-        self.fc2 = nn.Linear(128, out_d)
+        self.fc1 = nn.Linear(fc_l[0], fc_l[1])
+        self.fc2 = nn.Linear(fc_l[1], out_d)
         self.out_d = out_d
         self.device = device
+        self.size_img = size_img
 
     def forward(self, x, context=None):
         b_size = x.shape[0]
-        x = self.conv1(x.view(-1, 1, 28, 28))
+        x = self.conv1(x.view(-1, 1, self.size_img[0], self.size_img[1]))
         x = F.relu(x)
         x = self.conv2(x)
         x = F.max_pool2d(x, 2)
