@@ -206,10 +206,9 @@ class DAGNF(nn.Module):
         self.nets = ListModule(self, "DAGFlow")
         self.dropping_factors = dropping_factors
         self.img_sizes = img_sizes
-        self.pi = torch.tensor(math.pi).float()
+        self.pi = torch.tensor(math.pi).float().to(self.device)
         for i in range(nb_flow):
             dim_in = in_d if self.dropping_factors is None else img_sizes[i][0]*img_sizes[i][1]
-            print(dim_in)
             model = DAGStep(emb_net=emb_nets[i], in_d=dim_in, **kwargs)
             self.nets.append(model)
 
@@ -241,6 +240,7 @@ class DAGNF(nn.Module):
 
     def compute_ll_drop(self, x):
         jac_tot = 0.
+        b_size = x.shape[0]
         if len(self.nets) > 1:
             for id_net in range(len(self.nets) -1):
                 net = self.nets[id_net]
@@ -248,10 +248,10 @@ class DAGNF(nn.Module):
                 dropping = self.dropping_factors[id_net]
                 H, W = self.img_sizes[id_net][0], self.img_sizes[id_net][1]
                 h, w = self.img_sizes[id_net+1][0], self.img_sizes[id_net+1][1]
-                z = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(1, dropping[1], dropping[1]) \
-                        .contiguous().view(1, h, w, -1)[:, :, :, 1:].view(x.shape[0], -1)
-                x = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(1, dropping[1], dropping[1]) \
-                        .contiguous().view(1, h, w, -1)[:, :, :, 0].view(x.shape[0], -1)
+                z = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
+                        .contiguous().view(b_size, h, w, -1)[:, :, :, 1:].contiguous().view(b_size, -1)
+                x = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
+                        .contiguous().view(b_size, h, w, -1)[:, :, :, 0].contiguous().view(b_size, -1)
                 log_prob_gauss = -.5 * (torch.log(self.pi * 2) + z ** 2).sum(1)
                 jac_tot += jac.sum(1) + log_prob_gauss
         ll, z = self.nets[-1].compute_ll(x)

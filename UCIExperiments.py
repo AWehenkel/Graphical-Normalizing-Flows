@@ -109,7 +109,9 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 net.getDag().stoch_gate = False
                 net.getDag().s_thresh = False
                 net.getDag().h_thresh = 0.
-                net.dag_embedding.get_dag().A = torch.tensor(data.A)
+                net.dag_embedding.get_dag().A.data = torch.tensor(data.A).float().to(device)
+                net.dag_const = 0.
+                net.getDag().gumble = False
     if load:
         logger.info("Loading model...")
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
@@ -140,7 +142,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 dagness = net.DAGness()
                 if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
                     #net.l1_weight = .1
-                    net.dag_const = 1.
+                    #net.dag_const = 1.
                     logger.info("Dagness constraint set on.")
 
         i = 0
@@ -256,7 +258,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
             torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
             torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % epoch)
-            if dataset == "proteins":
+            if dataset == "proteins" and not umnn_maf:
                 torch.save(model.nets[0].dag_embedding.get_dag().soft_thresholded_A().detach().cpu(), path + '/A_%d.pt' % epoch)
 
         torch.save(model.state_dict(), path + '/model.pt')
