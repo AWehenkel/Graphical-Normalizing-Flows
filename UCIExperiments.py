@@ -53,7 +53,7 @@ def load_data(name):
 def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000,
           int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, min_pre_heating_epochs=30,
           all_args=None, file_number=None, train=True, solver="CC", nb_flow=1, linear_net=False, gumble_T=1.,
-          weight_decay=1e-5, learning_rate=1e-3):
+          weight_decay=1e-5, learning_rate=1e-3, predefined_graph=False):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -105,6 +105,11 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         for net in model.nets:
             net.getDag().stoch_gate = True
             net.getDag().noise_gate = False
+            if predefined_graph:
+                net.getDag().stoch_gate = False
+                net.getDag().s_thresh = False
+                net.getDag().h_thresh = 0.
+                net.dag_embedding.get_dag().A = torch.tensor(data.A)
     if load:
         logger.info("Loading model...")
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
@@ -115,6 +120,8 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 net.dag_embedding.get_dag().stoch_gate = False
                 net.dag_embedding.get_dag().noise_gate = False
                 net.dag_embedding.get_dag().s_thresh = False
+                if predefined_graph:
+                    net.dag_embedding.get_dag().A = torch.tensor(data.A)
 
     for epoch in range(nb_epoch):
         ll_tot = 0
@@ -242,13 +249,15 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     j += 2
                     # vf.plt_flow(model.compute_ll, ax)
                 if dataset == "proteins":
-                    logger.info("SHD: %d" % UCIdatasets.get_shd(A > 1e-3))
+                    logger.info("SHD: %s" % str(UCIdatasets.get_shd(A > 1e-3)))
                 plt.savefig("%s/DAG_%d.pdf" % (path, epoch))
                 G.clear()
                 plt.clf()
 
             torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
             torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % epoch)
+            if dataset == "proteins":
+                torch.save(model.nets[0].dag_embedding.get_dag().soft_thresholded_A().detach().cpu(), path + '/A_%d.pt' % epoch)
 
         torch.save(model.state_dict(), path + '/model.pt')
         torch.save(opt.state_dict(), path + '/ADAM.pt')
@@ -278,6 +287,8 @@ parser.add_argument("-linear_net", default=False, action="store_true")
 parser.add_argument("-gumble_T", default=1., type=float, help="Temperature of the gumble distribution.")
 parser.add_argument("-weight_decay", default=1e-5, type=float, help="Weight decay value")
 parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight decay value")
+parser.add_argument("-predefined_graph", default=False, action="store_true")
+
 
 
 args = parser.parse_args()
@@ -297,4 +308,5 @@ for toy in toys:
           int_net=args.int_net, emb_net=args.emb_net, b_size=args.b_size, all_args=args, umnn_maf=args.UMNN_MAF,
           nb_steps=args.nb_steps, min_pre_heating_epochs=args.min_pre_heating_epochs, file_number=args.f_number,
           solver=args.solver, nb_flow=args.nb_flow, train=not args.test, linear_net=args.linear_net,
-          gumble_T=args.gumble_T, weight_decay=args.weight_decay, learning_rate=args.learning_rate)
+          gumble_T=args.gumble_T, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
+          predefined_graph=args.predefined_graph)

@@ -114,9 +114,9 @@ class DAGNN(nn.Module):
         self.A *= 1. - torch.eye(self.d, device=self.device)
         return
 
-    def get_power_trace(self, alpha, Hutchinson=False):
-        if Hutchinson:
-            h_iter = 1
+    def get_power_trace(self, alpha, hutchinson=0):
+        if hutchinson != 0:
+            h_iter = hutchinson
             trace = 0.
             I = torch.eye(self.d, device=self.device)
             for j in range(h_iter):
@@ -268,7 +268,8 @@ class DAGNF(nn.Module):
 
 class DAGStep(nn.Module):
     def __init__(self, in_d, hidden_integrand=[50, 50, 50], emb_net=None, emb_d=-1, act_func='ELU', gumble_T=1.,
-                 nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1., linear_normalizer=False, cubic_normalize=False):
+                 nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1., linear_normalizer=False,
+                 cubic_normalize=False, hutchinson=0):
         super().__init__()
         self.linear_normalizer = linear_normalizer
         if linear_normalizer:
@@ -294,6 +295,7 @@ class DAGStep(nn.Module):
         _, S, _ = torch.svd(self.dag_embedding.get_dag().A)
         sigma_max = S.max().item()
         self.alpha = 1. / sigma_max ** 2
+        self.hutchinson = hutchinson
 
     def to(self, device):
         self.dag_embedding.to(device)
@@ -316,7 +318,7 @@ class DAGStep(nn.Module):
 
     def DAGness(self):
         alpha = min(self.alpha, 1)#.1 / self.d
-        return self.dag_embedding.get_dag().get_power_trace(alpha)
+        return self.dag_embedding.get_dag().get_power_trace(alpha, hutchinson=self.hutchinson)
 
     def loss(self, x, only_jac=False):
         if only_jac:

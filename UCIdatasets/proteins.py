@@ -20,14 +20,16 @@ class PROTEINS:
 
         self.n_dims = self.trn.x.shape[1]
 
+        self.A = get_adj_matrix().T
+
 
 def get_shd(A):
     A_true = get_adj_matrix()
-    return np.abs(A - A_true).sum()
+    return np.abs(A - A_true).sum(), np.abs(A - A_true.T).sum()
 
 
 def get_adj_matrix():
-    A = np.zeros(11, 11)
+    A = np.zeros((11, 11))
     # PKC Children
     A[8, 1] = 1
     A[8, 9] = 1
@@ -56,6 +58,7 @@ def get_adj_matrix():
     A[4, 6] = 1
     #PIP2 Child
     A[3, 8] = 1
+    return A
 
 
 
