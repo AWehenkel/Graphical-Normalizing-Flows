@@ -53,7 +53,7 @@ def load_data(name):
 def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000,
           int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, min_pre_heating_epochs=30,
           all_args=None, file_number=None, train=True, solver="CC", nb_flow=1, linear_net=False, gumble_T=1.,
-          weight_decay=1e-5, learning_rate=1e-3, predefined_graph=False):
+          weight_decay=1e-5, learning_rate=1e-3, predefined_graph=False, hot_encoding=False):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -85,13 +85,17 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 if dataset == "mnist":
                     net = MNISTCNN()
                 else:
-                    net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
+                    if hot_encoding:
+                        net = MLP(dim * 2, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
+                    else:
+                        net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
             else:
                 net = None
             emb_nets.append(net)
         l1_weight = l1
         model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_nets=emb_nets, device=device,
-                      l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net, gumble_T=gumble_T)
+                      l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net, gumble_T=gumble_T,
+                      hot_encoding=hot_encoding)
         #if nb_flow == 1:
         #    model = DAGStep(in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_net=emb_nets[0],
         #                    device=device, l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net,
@@ -105,13 +109,17 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         for net in model.nets:
             net.getDag().stoch_gate = True
             net.getDag().noise_gate = False
-            if predefined_graph:
-                net.getDag().stoch_gate = False
-                net.getDag().s_thresh = False
-                net.getDag().h_thresh = 0.
-                net.dag_embedding.get_dag().A.data = torch.tensor(data.A).float().to(device)
-                net.dag_const = 0.
-                net.getDag().gumble = False
+            with torch.no_grad():
+                if predefined_graph:
+                    print("coucou")
+                    net.getDag().stoch_gate = False
+                    net.getDag().s_thresh = False
+                    net.getDag().h_thresh = 0.
+                    net.getDag().post_process(1e-3)
+                    net.dag_embedding.get_dag().A.data = torch.tensor(data.A).float().to(device)
+                    net.dag_const = 0.
+                    net.getDag().gumble = False
+
     if load:
         logger.info("Loading model...")
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
@@ -250,11 +258,14 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     plt.colorbar(out, ax=ax)
                     j += 2
                     # vf.plt_flow(model.compute_ll, ax)
-                if dataset == "proteins":
-                    logger.info("SHD: %s" % str(UCIdatasets.get_shd(A > 1e-3)))
+
                 plt.savefig("%s/DAG_%d.pdf" % (path, epoch))
                 G.clear()
                 plt.clf()
+
+                if dataset == "proteins":
+                    logger.info("SHD: %s" % str(UCIdatasets.get_shd(A > 1e-3)))
+                    logger.info("Nb edges: %d" % (A > 1e-3).reshape(-1).sum().item())
 
             torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
             torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % epoch)
@@ -290,6 +301,7 @@ parser.add_argument("-gumble_T", default=1., type=float, help="Temperature of th
 parser.add_argument("-weight_decay", default=1e-5, type=float, help="Weight decay value")
 parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight decay value")
 parser.add_argument("-predefined_graph", default=False, action="store_true")
+parser.add_argument("-hot_encoding", default=False, action="store_true")
 
 
 
@@ -311,4 +323,4 @@ for toy in toys:
           nb_steps=args.nb_steps, min_pre_heating_epochs=args.min_pre_heating_epochs, file_number=args.f_number,
           solver=args.solver, nb_flow=args.nb_flow, train=not args.test, linear_net=args.linear_net,
           gumble_T=args.gumble_T, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
-          predefined_graph=args.predefined_graph)
+          predefined_graph=args.predefined_graph, hot_encoding=args.hot_encoding)

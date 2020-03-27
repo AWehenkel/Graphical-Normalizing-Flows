@@ -28,9 +28,9 @@ class MLP(nn.Module):
 
 
 class MNISTCNN(nn.Module):
-    def __init__(self, out_d=10, device="cpu", fc_l=[2304, 128], size_img=[28, 28]):
+    def __init__(self, out_d=10, device="cpu", fc_l=[2304, 128], size_img=[1, 28, 28]):
         super(MNISTCNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3, 1)
+        self.conv1 = nn.Conv2d(size_img[0], 16, 3, 1)
         self.conv2 = nn.Conv2d(16, 16, 3, 1)
         self.dropout1 = nn.Dropout2d(0.25)
         self.dropout2 = nn.Dropout2d(0.5)
@@ -42,7 +42,7 @@ class MNISTCNN(nn.Module):
 
     def forward(self, x, context=None):
         b_size = x.shape[0]
-        x = self.conv1(x.view(-1, 1, self.size_img[0], self.size_img[1]))
+        x = self.conv1(x.view(-1, self.size_img[0], self.size_img[1], self.size_img[2]))
         x = F.relu(x)
         x = self.conv2(x)
         x = F.max_pool2d(x, 2)
@@ -63,3 +63,38 @@ class MNISTCNN(nn.Module):
         self.fc2.to(device)
         self.device = device
         return self
+
+class CIFAR10CNN(nn.Module):
+    def __init__(self, out_d=10, device="cpu", fc_l=[400, 128, 84], size_img=[3, 32, 32], k_size=5):
+        super(CIFAR10CNN, self).__init__()
+        self.conv1 = nn.Conv2d(size_img[0], 6, k_size)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, k_size)
+        self.fc1 = nn.Linear(fc_l[0], fc_l[1])
+        self.fc2 = nn.Linear(fc_l[1], fc_l[2])
+        self.fc3 = nn.Linear(fc_l[2], out_d)
+
+        self.out_d = out_d
+        self.device = device
+        self.size_img = size_img
+
+    def forward(self, x, context=None):
+        b_size = x.shape[0]
+        x = self.pool(F.relu(self.conv1(x.view(-1, self.size_img[0], self.size_img[1], self.size_img[2]))))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(b_size, -1)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x).view(b_size, -1)
+        return x
+
+    def to(self, device):
+        self.conv1.to(device)
+        self.conv2.to(device)
+        self.dropout1.to(device)
+        self.dropout2.to(device)
+        self.fc1.to(device)
+        self.fc2.to(device)
+        self.device = device
+        return self
+

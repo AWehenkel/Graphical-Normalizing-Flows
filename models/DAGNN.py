@@ -13,7 +13,7 @@ class IdentityNN(nn.Module):
 
 
 class DAGNN(nn.Module):
-    def __init__(self, d, device="cpu", soft_thresholding=True, h_thresh=0., net=None, gumble_T=1.):
+    def __init__(self, d, device="cpu", soft_thresholding=True, h_thresh=0., net=None, gumble_T=1., hot_encoding=False):
         super().__init__()
         self.A = nn.Parameter(torch.ones(d, d, device=device)*1.5 + torch.randn((d, d), device=device)*.02)
         self.d = d
@@ -25,6 +25,7 @@ class DAGNN(nn.Module):
         self.net = net if net is not None else IdentityNN()
         self.gumble = True
         self.gumble_T = gumble_T
+        self.hot_encoding = hot_encoding
         with torch.no_grad():
             self.constrainA(h_thresh)
 
@@ -107,6 +108,12 @@ class DAGNN(nn.Module):
         else:
             e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))\
                 .view(x.shape[0]*self.d, -1)
+
+        if self.hot_encoding:
+            hot_encoding = torch.eye(self.d).unsqueeze(0).expand(x.shape[0], -1, -1).contiguous().view(-1, self.d).to(self.device)
+            full_e = torch.cat((e, hot_encoding), 1)
+            return self.net(full_e, context).view(x.shape[0], self.d, -1).permute(0, 2, 1).contiguous().view(x.shape[0], -1)
+
         return self.net(e, context).view(x.shape[0], self.d, -1).permute(0, 2, 1).contiguous().view(x.shape[0], -1)
 
     def constrainA(self, zero_threshold=.0001):
@@ -136,13 +143,13 @@ class DAGNN(nn.Module):
 
 class DAGEmbedding(nn.Module):
     def __init__(self, in_d, emb_d=-1, emb_net=None, hiddens_integrand=[50, 50, 50, 50], act_func='ELU', device="cpu",
-                 gumble_T=1.):
+                 gumble_T=1., hot_encoding=False):
         super().__init__()
         self.m_embeding = None
         self.device = device
         self.in_d = in_d
         self.emb_d = in_d if emb_net is None else emb_d
-        self.dag = DAGNN(in_d, net=emb_net, device=device, gumble_T=gumble_T)
+        self.dag = DAGNN(in_d, net=emb_net, device=device, gumble_T=gumble_T, hot_encoding=hot_encoding)
         self.parallel_nets = IntegrandNetwork(in_d, 1 + in_d + self.emb_d, hiddens_integrand, 1, act_func=act_func,
                                               device=device)
 
@@ -246,12 +253,14 @@ class DAGNF(nn.Module):
                 net = self.nets[id_net]
                 x, jac = net.compute_log_jac(x)
                 dropping = self.dropping_factors[id_net]
-                H, W = self.img_sizes[id_net][0], self.img_sizes[id_net][1]
-                h, w = self.img_sizes[id_net+1][0], self.img_sizes[id_net+1][1]
-                z = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
-                        .contiguous().view(b_size, h, w, -1)[:, :, :, 1:].contiguous().view(b_size, -1)
-                x = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
-                        .contiguous().view(b_size, h, w, -1)[:, :, :, 0].contiguous().view(b_size, -1)
+                C, H, W = self.img_sizes[id_net]
+                c, h, w = self.img_sizes[id_net + 1]
+                z = x.view(-1, C, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
+                        .unfold(3, dropping[2], dropping[2]).contiguous().view(b_size, c, h, w, -1)[:, :, :, :, 1:] \
+                    .contiguous().view(b_size, -1)
+                x = x.view(-1, C, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
+                        .unfold(3, dropping[2], dropping[2]).contiguous().view(b_size, c, h, w, -1)[:, :, :, :, 0] \
+                    .contiguous().view(b_size, -1)
                 log_prob_gauss = -.5 * (torch.log(self.pi * 2) + z ** 2).sum(1)
                 jac_tot += jac.sum(1) + log_prob_gauss
         ll, z = self.nets[-1].compute_ll(x)
@@ -291,14 +300,16 @@ class DAGNF(nn.Module):
                 b_size = x.shape[0]
                 x, loss = net.loss(x, only_jac=True)
                 dropping = self.dropping_factors[id_net]
-                H, W = self.img_sizes[id_net][0], self.img_sizes[id_net][1]
-                h, w = self.img_sizes[id_net + 1][0], self.img_sizes[id_net + 1][1]
-                z = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
-                        .contiguous().view(b_size, h, w, -1)[:, :, :, 1:].contiguous().view(b_size, -1)
-                x = x.view(-1, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
-                        .contiguous().view(b_size, h, w, -1)[:, :, :, 0].contiguous().view(b_size, -1)
+                C, H, W = self.img_sizes[id_net]
+                c, h, w = self.img_sizes[id_net + 1]
+                z = x.view(-1, C, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1])\
+                        .unfold(3, dropping[2], dropping[2]).contiguous().view(b_size, c, h, w, -1)[:, :, :, :, 1:]\
+                    .contiguous().view(b_size, -1)
+                x = x.view(-1, C, H, W).unfold(1, dropping[0], dropping[0]).unfold(2, dropping[1], dropping[1]) \
+                        .unfold(3, dropping[2], dropping[2]).contiguous().view(b_size, c, h, w, -1)[:, :, :, :, 0] \
+                    .contiguous().view(b_size, -1)
                 log_prob_gauss = -.5 * (torch.log(self.pi * 2) + z ** 2).sum(1)
-                loss_tot += loss + log_prob_gauss.mean(0)
+                loss_tot += loss - log_prob_gauss.mean(0)
         return loss_tot + self.nets[-1].loss(x)
 
     def constrainA(self, zero_threshold):
@@ -316,19 +327,20 @@ class DAGNF(nn.Module):
 class DAGStep(nn.Module):
     def __init__(self, in_d, hidden_integrand=[50, 50, 50], emb_net=None, emb_d=-1, act_func='ELU', gumble_T=1.,
                  nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1., linear_normalizer=False,
-                 cubic_normalize=False, hutchinson=0):
+                 cubic_normalize=False, hutchinson=0, hot_encoding=False):
         super().__init__()
         self.linear_normalizer = linear_normalizer
         if linear_normalizer:
             self.dag_embedding = DAGNN(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
-                                       gumble_T=gumble_T)
+                                       gumble_T=gumble_T, hot_encoding=hot_encoding)
             self.normalizer = LinearNormalizer(self.dag_embedding, emb_net, in_d, device=device)
         elif cubic_normalize:
             self.dag_embedding = DAGNN(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
-                                       gumble_T=gumble_T)
+                                       gumble_T=gumble_T, hot_encoding=hot_encoding)
             self.normalizer = CubicNormalizer(self.dag_embedding, emb_net, in_d, device=device)
         else:
-            self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device, gumble_T=gumble_T)
+            self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device=device,
+                                              gumble_T=gumble_T, hot_encoding=hot_encoding)
             self.normalizer = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, device=device, solver=solver)
         self.lambd = .0
         self.c = 1e-3

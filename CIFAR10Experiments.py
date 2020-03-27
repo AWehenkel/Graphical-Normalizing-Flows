@@ -1,14 +1,10 @@
-from models import DAGNF, MLP, MNISTCNN
+from models import DAGNF, CIFAR10CNN
 import torch
 from timeit import default_timer as timer
 import lib.utils as utils
 import os
-import matplotlib
-import matplotlib.pyplot as plt
-import networkx as nx
-from torchvision import datasets, transforms
-from lib.transform import AddUniformNoise, ToTensor, HorizontalFlip, Transpose, Resize
-import numpy as np
+import torchvision.datasets as dset
+import torchvision.transforms as tforms
 import math
 from UMNN import UMNNMAFFlow
 
@@ -27,24 +23,34 @@ def batch_iter(X, batch_size, shuffle=False):
         yield X[batch_idxs]
 
 
+def add_noise(x):
+    """
+    [0, 1] -> [0, 255] -> add noise -> [0, 1]
+    """
+    if args.add_noise:
+        noise = x.new().resize_as_(x).uniform_()
+        x = x * 255 + noise
+        x = x / 256
+    return x
+
+
 def load_data(batch_size=100, cuda=-1):
-    data = datasets.MNIST('./MNIST', train=True, download=True,
-                          transform=transforms.Compose([
-                              AddUniformNoise(),
-                              ToTensor()
-                          ]))
-
-    train_data, valid_data = torch.utils.data.random_split(data, [50000, 10000])
-
-    test_data = datasets.MNIST('./MNIST', train=False, download=True,
-                               transform=transforms.Compose([
-                                   AddUniformNoise(),
-                                   ToTensor()
-                               ]))
+    im_dim = 3
+    im_size = 32 if args.imagesize is None else args.imagesize
+    train_data = dset.CIFAR10(
+        root="./data", train=True, transform=tforms.Compose([
+            tforms.Resize(im_size),
+            tforms.RandomHorizontalFlip(),
+            tforms.ToTensor(),
+            add_noise,
+        ]), download=True
+    )
+    test_data = dset.CIFAR10(root="./data", train=False, transform=trans(im_size), download=True)
     kwargs = {'num_workers': 0, 'pin_memory': True} if cuda > -1 else {}
 
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True, **kwargs)
-    valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=batch_size, shuffle=True, **kwargs)
+    # WARNING VALID = TEST
+    valid_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, **kwargs)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, **kwargs)
     return train_loader, valid_loader, test_loader
 
@@ -71,19 +77,19 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
 
     logger.info("Data loaded.")
 
-    dim = 28**2
+    dim = 3*32*32
 
     emb_nets = []
 
     # Fixed for test
     nb_flow = 3
-    img_sizes = [[1, 28, 28], [1, 14, 14], [1, 7, 7]]
-    dropping_factors = [[1, 2, 2], [1, 2, 2]]
-    fc_l = [[2304, 128], [400, 64], [16, 16]]
-
+    img_sizes = [[3, 32, 32], [1, 16, 16], [1, 8, 8]]
+    dropping_factors = [[3, 2, 2], [1, 2, 2]]
+    fc_l = [[400, 128, 84], [64, 32, 32], [16, 32, 32]]
+    k_sizes = [5, 3, 2]
     for i in range(nb_flow):
         if emb_net is not None:
-            net = MNISTCNN(out_d=emb_net[-1], fc_l=fc_l[i], size_img=img_sizes[i]).to(device)
+            net = CIFAR10CNN(out_d=emb_net[-1], fc_l=fc_l[i], size_img=img_sizes[i], k_size=k_sizes[i]).to(device)
         else:
             net = None
         emb_nets.append(net)
