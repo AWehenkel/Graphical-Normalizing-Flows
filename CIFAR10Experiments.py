@@ -22,21 +22,20 @@ def batch_iter(X, batch_size, shuffle=False):
     for batch_idxs in idxs.split(batch_size):
         yield X[batch_idxs]
 
-
 def add_noise(x):
     """
     [0, 1] -> [0, 255] -> add noise -> [0, 1]
     """
-    if args.add_noise:
-        noise = x.new().resize_as_(x).uniform_()
-        x = x * 255 + noise
-        x = x / 256
+    noise = x.new().resize_as_(x).uniform_()
+    x = x * 255 + noise
+    x = x / 256
     return x
 
 
 def load_data(batch_size=100, cuda=-1):
     im_dim = 3
-    im_size = 32 if args.imagesize is None else args.imagesize
+    im_size = 32 #if args.imagesize is None else args.imagesize
+    trans = lambda im_size: tforms.Compose([tforms.Resize(im_size), tforms.ToTensor(), add_noise])
     train_data = dset.CIFAR10(
         root="./data", train=True, transform=tforms.Compose([
             tforms.Resize(im_size),
@@ -121,7 +120,6 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
 
     logger.info("Loading data...")
     train_dl, valid_dl, test_dl = load_data()
-    dim = 28**2
     logger.info("Data loaded.")
 
     for epoch in range(nb_epoch):

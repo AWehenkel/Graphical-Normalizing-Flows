@@ -215,7 +215,7 @@ class DAGNF(nn.Module):
         self.img_sizes = img_sizes
         self.pi = torch.tensor(math.pi).float().to(self.device)
         for i in range(nb_flow):
-            dim_in = in_d if self.dropping_factors is None else img_sizes[i][0]*img_sizes[i][1]
+            dim_in = in_d if self.dropping_factors is None else img_sizes[i][0]*img_sizes[i][1]*img_sizes[i][2]
             model = DAGStep(emb_net=emb_nets[i], in_d=dim_in, **kwargs)
             self.nets.append(model)
 
