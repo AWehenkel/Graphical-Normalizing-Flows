@@ -183,7 +183,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
                 i += 1
         ll_test /= i
-
+        bpp_test /= i
         end = timer()
         if umnn_maf:
             logger.info(
@@ -218,9 +218,10 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                     bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
                     i += 1
                 ll_test /= i
+                bpp_test /= i
                 dagness = max(model.DAGness())
-                logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
-                            format(epoch, threshold, ll_test, dagness))
+                logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f}".
+                    format(epoch, threshold, ll_test, bpp_test, dagness))
             i = 0
             model.set_h_threshold(0.)
             for net in model.nets:

@@ -33,7 +33,7 @@ def add_noise(x):
     return x
 
 
-def compute_bpp(ll, x, alpha=1e-6):
+def compute_bpp(ll, x, alpha=0.05):
     d = x.shape[1]
     bpp = -ll / (d * np.log(2)) - np.log2(1 - 2 * alpha) + 8 \
           + 1 / d * (torch.log2(torch.sigmoid(x)) + torch.log2(1. - torch.sigmoid(x))).sum(1)
@@ -176,6 +176,8 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
 
         # Valid loop
         ll_test = 0.
+        bpp_test = 0.
+
         i = 0.
         with torch.no_grad():
             model.set_steps_nb(nb_steps + 20)
@@ -183,8 +185,10 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 cur_x = cur_x.view(-1, dim).float().to(device)
                 ll, _ = model.compute_ll(cur_x)
                 ll_test += ll.mean().item()
+                bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
                 i += 1
         ll_test /= i
+        bpp_test /= i
 
         end = timer()
         if umnn_maf:
@@ -220,9 +224,10 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                     bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
                     i += 1
                 ll_test /= i
+                bpp_test /= i
                 dagness = max(model.DAGness())
-                logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
-                            format(epoch, threshold, ll_test, dagness))
+                logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f}".
+                            format(epoch, threshold, ll_test, bpp_test, dagness))
             i = 0
             model.set_h_threshold(0.)
             for net in model.nets:
@@ -271,7 +276,7 @@ args = parser.parse_args()
 from datetime import datetime
 now = datetime.now()
 
-path =  "MNIST/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
+path = "CIFAR10/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
 if not (os.path.isdir(path)):
     os.makedirs(path)
 train(load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
