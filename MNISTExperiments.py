@@ -163,13 +163,11 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         # Training loop
         if train:
             for batch_idx, (cur_x, target) in enumerate(train_loader):
-                print("ici1")
                 cur_x = cur_x.view(-1, dim).float().to(dev)
                 model.module.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
                 loss = model.forward(cur_x).mean() if not umnn_maf else -model.module.compute_ll(cur_x)[0].mean()
                 loss = loss/batch_per_optim_step
                 if math.isnan(loss.item()):
-                    print("ici")
                     print(loss.item())
                     print(model.compute_ll(cur_x))
                     exit()
