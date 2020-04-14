@@ -117,7 +117,6 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
     opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     # opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
     if not umnn_maf and train:
-        print(model.module.nets)
         for net in model.module.nets:
             net.getDag().stoch_gate = True
             net.getDag().noise_gate = False
@@ -168,8 +167,9 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 loss = model.forward(cur_x).mean() if not umnn_maf else -model.module.compute_ll(cur_x)[0].mean()
                 loss = loss/batch_per_optim_step
                 if math.isnan(loss.item()):
-                    print(loss.item())
-                    print(model.compute_ll(cur_x))
+                    print("Error Nan in loss")
+                    #print(loss.item())
+                    #print(model.compute_ll(cur_x))
                     exit()
                 ll_tot += loss.item()
                 i += 1
