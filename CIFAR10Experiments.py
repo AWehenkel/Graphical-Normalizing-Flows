@@ -6,6 +6,7 @@ import os
 import torchvision.datasets as dset
 import torchvision.transforms as tforms
 import math
+import torch.nn as nn
 from UMNN import UMNNMAFFlow
 import numpy as np
 
@@ -64,13 +65,16 @@ def load_data(batch_size=100, cuda=-1):
 def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000,
           int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, min_pre_heating_epochs=30,
           all_args=None, file_number=None, train=True, solver="CC", nb_flow=1, linear_net=False, gumble_T=1.,
-          weight_decay=1e-5, learning_rate=1e-3, hutchinson=0, batch_per_optim_step=1):
+          weight_decay=1e-5, learning_rate=1e-3, hutchinson=0, batch_per_optim_step=1, n_gpu=1):
+    gpu_devices = ""
+    for i in range(n_gpu):
+        gpu_devices += '%d,' % i
+    gpu_devices = gpu_devices[:-1]
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
     logger.info("Creating model...")
-
-    device = "cpu" if not(torch.cuda.is_available()) else "cuda:0"
+    device = "cpu" if not(torch.cuda.is_available()) else "cuda:%s" % gpu_devices
 
     if load:
         train = False
@@ -101,8 +105,11 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         emb_nets.append(net)
     l1_weight = l1
     model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_nets=emb_nets,
-                  device=device, l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net,
+                  l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net,
                   gumble_T=gumble_T, hutchinson=hutchinson, dropping_factors=dropping_factors, img_sizes=img_sizes)
+
+    model = nn.DataParallel(model)
+    model.to(device)
 
     if min_pre_heating_epochs > 0:
         model.dag_const = 0.
@@ -203,38 +210,38 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
 
         if epoch % 10 == 0 and not umnn_maf:
             stoch_gate, noise_gate, s_thresh = [], [], []
-
-            for net in model.nets:
-                stoch_gate.append(net.getDag().stoch_gate)
-                noise_gate.append(net.getDag().noise_gate)
-                s_thresh.append(net.getDag().s_thresh)
-                net.getDag().stoch_gate = False
-                net.getDag().noise_gate = False
-                net.getDag().s_thresh = True
-            for threshold in [.95, .5, .1, .01, .0001]:
-                model.set_h_threshold(threshold)
-                # Valid loop
-                ll_test = 0.
-                bpp_test = 0.
-                i = 0.
-                for batch_idx, (cur_x, target) in enumerate(valid_loader):
-                    cur_x = cur_x.view(-1, dim).float().to(device)
-                    ll, _ = model.compute_ll(cur_x)
-                    ll_test += ll.mean().item()
-                    bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
+            with torch.no_grad():
+                for net in model.nets:
+                    stoch_gate.append(net.getDag().stoch_gate)
+                    noise_gate.append(net.getDag().noise_gate)
+                    s_thresh.append(net.getDag().s_thresh)
+                    net.getDag().stoch_gate = False
+                    net.getDag().noise_gate = False
+                    net.getDag().s_thresh = True
+                for threshold in [.95, .5, .1, .01, .0001]:
+                    model.set_h_threshold(threshold)
+                    # Valid loop
+                    ll_test = 0.
+                    bpp_test = 0.
+                    i = 0.
+                    for batch_idx, (cur_x, target) in enumerate(valid_loader):
+                        cur_x = cur_x.view(-1, dim).float().to(device)
+                        ll, _ = model.compute_ll(cur_x)
+                        ll_test += ll.mean().item()
+                        bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
+                        i += 1
+                    ll_test /= i
+                    bpp_test /= i
+                    dagness = max(model.DAGness())
+                    logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f}".
+                                format(epoch, threshold, ll_test, bpp_test, dagness))
+                i = 0
+                model.set_h_threshold(0.)
+                for net in model.nets:
+                    net.getDag().stoch_gate = stoch_gate[i]
+                    net.getDag().noise_gate = noise_gate[i]
+                    net.getDag().s_thresh = s_thresh[i]
                     i += 1
-                ll_test /= i
-                bpp_test /= i
-                dagness = max(model.DAGness())
-                logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f}".
-                            format(epoch, threshold, ll_test, bpp_test, dagness))
-            i = 0
-            model.set_h_threshold(0.)
-            for net in model.nets:
-                net.getDag().stoch_gate = stoch_gate[i]
-                net.getDag().noise_gate = noise_gate[i]
-                net.getDag().s_thresh = s_thresh[i]
-                i += 1
 
         if epoch % nb_step_dual == 0:
             logger.info("Saving model N°%d" % epoch)
@@ -271,6 +278,7 @@ parser.add_argument("-weight_decay", default=1e-5, type=float, help="Weight deca
 parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight decay value")
 parser.add_argument("-hutchinson", default=0, type=int, help="Use a hutchinson trace estimator if non null")
 parser.add_argument("-batch_per_optim_step", default=1, type=int, help="Number of batch to accumulate")
+parser.add_argument("-nb_gpus", default=1, type=int, help="Number of gpus to train on")
 
 args = parser.parse_args()
 from datetime import datetime
@@ -284,4 +292,4 @@ train(load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb
       nb_steps=args.nb_steps, min_pre_heating_epochs=args.min_pre_heating_epochs, file_number=args.f_number,
       solver=args.solver, nb_flow=args.nb_flow, train=not args.test, linear_net=args.linear_net,
       gumble_T=args.gumble_T, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
-      hutchinson=args.hutchinson, batch_per_optim_step=args.batch_per_optim_step)
+      hutchinson=args.hutchinson, batch_per_optim_step=args.batch_per_optim_step, n_gpu=args.nb_gpus)

@@ -30,7 +30,7 @@ class DAGNN(nn.Module):
             self.constrainA(h_thresh)
 
     def to(self, device):
-        self.A = self.A.to(device)
+        self.A.to(device)
         self.device = device
         return self
 
@@ -81,6 +81,7 @@ class DAGNN(nn.Module):
         return self.A**2 * (self.A**2 > self.h_thresh).float()
 
     def forward(self, x, context=None):
+        self.device = "cpu" if not(self.A.is_cuda) else "cuda:%d" % self.A.get_device()
         if self.h_thresh > 0:
             if self.stoch_gate:
                 e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.stochastic_gate(self.hard_thresholded_A().unsqueeze(0)
@@ -171,7 +172,13 @@ class DAGEmbedding(nn.Module):
         return self.parallel_nets.forward(x_t, self.m_embeding)
 
 
-class ListModule(object):
+class ListModule(nn.Module):
+    def __init__(self, *args):
+        super(ListModule, self).__init__()
+        idx = 0
+        for module in args:
+            self.add_module(str(idx), module)
+            idx += 1
     def __init__(self, module, prefix, *args):
         """
         The ListModule class is a container for multiple nn.Module.
@@ -210,7 +217,7 @@ class DAGNF(nn.Module):
     def __init__(self, emb_nets, in_d, nb_flow=1, dropping_factors=None, img_sizes=None, **kwargs):
         super().__init__()
         self.device = kwargs['device']
-        self.nets = ListModule(self, "DAGFlow")
+        self.nets = nn.ModuleList()
         self.dropping_factors = dropping_factors
         self.img_sizes = img_sizes
         self.pi = torch.tensor(math.pi).float().to(self.device)
@@ -220,6 +227,7 @@ class DAGNF(nn.Module):
             self.nets.append(model)
 
     def to(self, device):
+        self.device = device
         self.nets.to(device)
         return self
 
@@ -227,10 +235,12 @@ class DAGNF(nn.Module):
         for net in self.nets:
             net.set_steps_nb(nb_steps)
 
-    def forward(self, x):
-        for net in self.nets:
-            x = net.forward(x)
-        return x
+    def forward(self, x, only_ll=False):
+        if only_ll:
+            return self.compute_ll(x)
+        #for net in self.nets:
+        #    x = net.forward(x)
+        return self.loss(x)
 
     def compute_ll(self, x):
         if self.dropping_factors is not None:
@@ -309,7 +319,7 @@ class DAGNF(nn.Module):
                         .unfold(3, dropping[2], dropping[2]).contiguous().view(b_size, c, h, w, -1)[:, :, :, :, 0] \
                     .contiguous().view(b_size, -1)
                 log_prob_gauss = -.5 * (torch.log(self.pi * 2) + z ** 2).sum(1)
-                loss_tot += loss - log_prob_gauss.mean(0)
+                loss_tot += loss - log_prob_gauss
         return loss_tot + self.nets[-1].loss(x)
 
     def constrainA(self, zero_threshold):
@@ -387,7 +397,7 @@ class DAGStep(nn.Module):
             ll, _ = self.normalizer.compute_ll(x)
 
         lag_const = self.DAGness()
-        loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) - ll.mean() + \
+        loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) - ll + \
                self.l1_weight*self.dag_embedding.get_dag().A.abs().mean()
         if only_jac:
             return x, loss

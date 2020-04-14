@@ -38,6 +38,8 @@ class LinearNormalizer(nn.Module):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
+        print(sigma.mean(0))
+
         sigma.clamp_(-5., 2.)
         mu.clamp_(-5., 5.)
         z = x * torch.exp(sigma) + mu
@@ -49,6 +51,7 @@ class LinearNormalizer(nn.Module):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
+        print(sigma.mean(0))
         sigma.clamp_(-5., 2.)
         mu.clamp_(-5., 5.)
         #sigma.clamp_(-3., 3.)
@@ -65,6 +68,8 @@ class LinearNormalizer(nn.Module):
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
         sigma.clamp_(-5., 2.)
+        print(sigma.mean(0))
+
         mu.clamp_(-5., 5.)
         #sigma.clamp_(-3., 3.)
         z = x * torch.exp(sigma) + mu

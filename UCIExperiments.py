@@ -238,7 +238,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 A_thresholded = A_normal * (A_normal > .001)
                 j = 0
                 for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
-                    A /= A.sum() / np.log(dim)
+                    #A /= A.sum() / np.log(dim)
                     ax = plt.subplot(2, 2, 1 + j)
                     plt.title(name + " DAG")
                     G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)

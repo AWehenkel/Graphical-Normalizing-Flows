@@ -51,8 +51,11 @@ def plt_flow(transform, ax, npts=50, title="$q(x)$", device="cpu"):
     #xx = z[:, 0].cpu().numpy().reshape(npts, npts)
     #yy = z[:, 1].cpu().numpy().reshape(npts, npts)
     qz = np.exp(logqx.cpu().numpy()).reshape(npts, npts)
+    qz_1 = qz.sum(1)
+    qz_2 = qz.sum(0)
 
-    plt.pcolormesh(xx, yy, qz)
+    pcol = plt.pcolormesh(xx, yy, qz, linewidth=0, rasterized=True)
+    pcol.set_edgecolor('face')
     ax.set_xlim(-4.5, 4.5)
     ax.set_ylim(-4.5, 4.5)
     cmap = matplotlib.cm.get_cmap(None)
@@ -62,7 +65,9 @@ def plt_flow(transform, ax, npts=50, title="$q(x)$", device="cpu"):
     plt.ylabel('$x_2$')
     ax.get_xaxis().set_ticks([-4, 0, 4])
     ax.get_yaxis().set_ticks([-4, 0, 4])
+
     #ax.set_title(title)
+    return qz_1, qz_2
 
 def plt_stream(transform, ax, npts=200, title="Density streamflow", device="cpu"):
     side = np.linspace(LOW, HIGH, npts)

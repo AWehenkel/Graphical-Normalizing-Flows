@@ -26,9 +26,9 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    linear_net = False
-    nb_flow = 1
-    emb_net = [100, 100, 100, 2]
+    linear_net = True
+    nb_flow = 10
+    emb_net = [100, 100, 100, 100, 100, 2]
     emb_nets = []
     for i in range(nb_flow):
         if emb_net is not None:
@@ -40,7 +40,29 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=emb_nets[0].out_d, emb_nets=emb_nets, device=device,
                   l1_weight=l1, nb_steps=nb_steps, linear_normalizer=linear_net)
     model.dag_const = 0.
-    opt = torch.optim.Adam(model.parameters(), 1e-2, weight_decay=1e-5)
+
+    if True:
+        i = 0
+        for net in model.nets:
+            with torch.no_grad():
+                print("coucou")
+                A = torch.zeros(2, 2)
+                if i % 2 == 0:
+                    A[1, 0] = 1.
+                    #A[2, 0] = 1.
+                else:
+                    A[0, 1] = 1.
+                    #A[0, 2] = 1.
+                i += 1
+                net.getDag().stoch_gate = False
+                net.getDag().s_thresh = False
+                net.getDag().h_thresh = 0.
+                net.getDag().post_process(1e-3)
+                net.dag_embedding.get_dag().A.data = A.float().to(device)
+                net.dag_const = 0.
+                net.getDag().gumble = False
+
+    opt = torch.optim.Adam(model.parameters(), 1e-4, weight_decay=1e-5)
     #opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
 
     if load:
@@ -112,18 +134,27 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
                 model.set_h_threshold(0.)
 
 
-        if epoch % 1000 == 0:
-            if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians"]:
+        if epoch % 500 == 0:
+            if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians", "2gaussians", "2igaussians", "8gaussians"]:
                 def compute_ll_2spirals(x):
+                    if toy in ["2gaussians", "8gaussians", "2igaussians"]:
+                        return model.compute_ll(x.to(device))
                     return model.compute_ll(torch.cat((x, torch.zeros(x.shape[0], dim-2).to(device)), 1))
                 def compute_ll_8gaussians(x):
+                    if toy in ["2gaussians", "8gaussians", "2igaussians"]:
+                        return model.compute_ll(x.to(device))
                     return model.compute_ll(torch.cat((torch.zeros(x.shape[0], dim-2).to(device), x), 1))
                 with torch.no_grad():
-                    ax = plt.subplot(1, 2, 1, aspect="equal")
-                    vf.plt_flow(compute_ll_2spirals, ax, device=device)
-                    ax = plt.subplot(1, 2, 2, aspect="equal")
-                    vf.plt_flow(compute_ll_8gaussians, ax, device=device)
-                    plt.savefig("%s%s/flow_%d.pdf" % (folder, toy, epoch))
+                    npts = 100
+                    plt.figure(figsize=(30, 10))
+                    ax = plt.subplot(1, 3, 1, aspect="equal")
+                    qz_1, qz_2 = vf.plt_flow(compute_ll_2spirals, ax, npts=npts, device=device)
+                    plt.subplot(1, 3, 2)
+                    plt.plot(np.linspace(-4, 4, npts), qz_1)
+                    plt.subplot(1, 3, 3)
+                    plt.plot(np.linspace(-4, 4, npts), qz_2)
+                    flow_type = "linear" if linear_net else "monotonic"
+                    plt.savefig("%s%s/flow_%s_%d_%d.pdf" % (folder, toy, flow_type, nb_flow, epoch))
 
             # Plot DAG
             font = {'family': 'normal',
@@ -133,6 +164,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
             matplotlib.rc('font', **font)
             for net in model.nets:
                 A_normal = net.getDag().soft_thresholded_A().detach().cpu().numpy().T
+                print(A_normal)
                 #logger.info(str(A_normal))
                 A_thresholded = A_normal * (A_normal > .001)
                 j = 0
@@ -160,17 +192,17 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
                     j += 2
 
                 #vf.plt_flow(model.compute_ll, ax)
-                plt.savefig("%s%s/DAG_%d.pdf" % (folder, toy, epoch))
+                #plt.savefig("%s%s/DAG_%d.pdf" % (folder, toy, epoch))
                 torch.save(model.state_dict(), folder + toy + '/model.pt')
                 torch.save(opt.state_dict(), folder + toy + '/ADAM.pt')
                 G.clear()
                 plt.clf()
 
 
-toy = "2spirals-8gaussians"
+toy = "8gaussians"
 
 import argparse
-datasets = ["8gaussians", "swissroll", "moons", "pinwheel", "cos", "2spirals", "checkerboard", "line", "line-noisy",
+datasets = ["2igaussians", "2gaussians", "8gaussians", "swissroll", "moons", "pinwheel", "cos", "2spirals", "checkerboard", "line", "line-noisy",
             "circles", "joint_gaussian", "2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians",
             "8-MIX", "7-MIX"]
 
