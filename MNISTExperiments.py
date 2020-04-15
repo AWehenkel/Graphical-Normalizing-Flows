@@ -191,7 +191,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
             model.module.set_steps_nb(nb_steps + 20)
             for batch_idx, (cur_x, target) in enumerate(valid_loader):
                 cur_x = cur_x.view(-1, dim).float().to(0)
-                ll, _ = model.compute_ll(cur_x)
+                ll, _ = model(cur_x, only_ll=True)
                 ll_test += ll.mean().item()
                 bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
                 i += 1
