@@ -104,19 +104,19 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
             net = None
         emb_nets.append(net)
     l1_weight = l1
-    model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_nets=emb_nets,
-                  l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net,
-                  gumble_T=gumble_T, hutchinson=hutchinson, dropping_factors=dropping_factors, img_sizes=img_sizes)
-
-    model = nn.DataParallel(model)
-    model.to(device)
+    master_device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    model = nn.DataParallel(DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d,
+                                  emb_nets=emb_nets, l1_weight=l1, nb_steps=nb_steps, solver=solver,
+                                  linear_normalizer=linear_net, gumble_T=gumble_T, hutchinson=hutchinson,
+                                  dropping_factors=dropping_factors, img_sizes=img_sizes, device=master_device),
+                            device_ids=list(range(n_gpu))).to(master_device)
 
     if min_pre_heating_epochs > 0:
         model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     # opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
     if not umnn_maf and train:
-        for net in model.nets:
+        for net in model.module.nets:
             net.getDag().stoch_gate = True
             net.getDag().noise_gate = False
     if load:
@@ -125,16 +125,10 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         model.train()
         opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
         if not train and not umnn_maf:
-            for net in model.nets:
+            for net in model.module.nets:
                 net.dag_embedding.get_dag().stoch_gate = False
                 net.dag_embedding.get_dag().noise_gate = False
                 net.dag_embedding.get_dag().s_thresh = False
-
-
-
-    logger.info("Loading data...")
-    train_dl, valid_dl, test_dl = load_data()
-    logger.info("Data loaded.")
 
     for epoch in range(nb_epoch):
         ll_tot = 0
@@ -143,13 +137,13 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         # Update constraints
         if epoch % 1 == 0 and not umnn_maf:
             with torch.no_grad():
-                model.constrainA(zero_threshold=0.)
+                model.module.constrainA(zero_threshold=0.)
 
         if epoch % nb_step_dual == 0 and epoch != 0 and not umnn_maf and epoch > min_pre_heating_epochs:
-            model.update_dual_param()
+            model.module.update_dual_param()
 
         if not umnn_maf:
-            for net in model.nets:
+            for net in model.module.nets:
                 dagness = net.DAGness()
                 if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
                     #net.l1_weight = .1
@@ -160,9 +154,9 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         # Training loop
         if train:
             for batch_idx, (cur_x, target) in enumerate(train_loader):
-                cur_x = cur_x.view(-1, dim).float().to(device)
-                model.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
-                loss = model.loss(cur_x) if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
+                cur_x = cur_x.view(-1, dim).float().to(master_device)
+                model.module.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
+                loss = model(cur_x).mean() if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
                 loss = loss/batch_per_optim_step
                 if math.isnan(loss.item()):
                     print("ici")
@@ -187,10 +181,10 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
 
         i = 0.
         with torch.no_grad():
-            model.set_steps_nb(nb_steps + 20)
+            model.module.set_steps_nb(nb_steps + 20)
             for batch_idx, (cur_x, target) in enumerate(valid_loader):
-                cur_x = cur_x.view(-1, dim).float().to(device)
-                ll, _ = model.compute_ll(cur_x)
+                cur_x = cur_x.view(-1, dim).float().to(master_device)
+                ll, _ = model(cur_x, only_ll=True)
                 ll_test += ll.mean().item()
                 bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
                 i += 1
@@ -203,7 +197,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 "epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - Valid BPP {:4f} - Elapsed time per epoch {:4f} "
                 "(seconds)".format(epoch, ll_tot, ll_test, bpp_test, end - start))
         else:
-            dagness = max(model.DAGness())
+            dagness = max(model.module.DAGness())
             logger.info(
                 "epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f} "
                 "- Elapsed time per epoch {:4f} (seconds)".format(epoch, ll_tot, ll_test, bpp_test, dagness, end - start))
@@ -211,7 +205,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         if epoch % 10 == 0 and not umnn_maf:
             stoch_gate, noise_gate, s_thresh = [], [], []
             with torch.no_grad():
-                for net in model.nets:
+                for net in model.module.nets:
                     stoch_gate.append(net.getDag().stoch_gate)
                     noise_gate.append(net.getDag().noise_gate)
                     s_thresh.append(net.getDag().s_thresh)
@@ -219,25 +213,25 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                     net.getDag().noise_gate = False
                     net.getDag().s_thresh = True
                 for threshold in [.95, .5, .1, .01, .0001]:
-                    model.set_h_threshold(threshold)
+                    model.module.set_h_threshold(threshold)
                     # Valid loop
                     ll_test = 0.
                     bpp_test = 0.
                     i = 0.
                     for batch_idx, (cur_x, target) in enumerate(valid_loader):
                         cur_x = cur_x.view(-1, dim).float().to(device)
-                        ll, _ = model.compute_ll(cur_x)
+                        ll, _ = model(cur_x, only_ll=True)
                         ll_test += ll.mean().item()
                         bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
                         i += 1
                     ll_test /= i
                     bpp_test /= i
-                    dagness = max(model.DAGness())
+                    dagness = max(model.module.DAGness())
                     logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f}".
                                 format(epoch, threshold, ll_test, bpp_test, dagness))
                 i = 0
-                model.set_h_threshold(0.)
-                for net in model.nets:
+                model.module.set_h_threshold(0.)
+                for net in model.module.nets:
                     net.getDag().stoch_gate = stoch_gate[i]
                     net.getDag().noise_gate = noise_gate[i]
                     net.getDag().s_thresh = s_thresh[i]

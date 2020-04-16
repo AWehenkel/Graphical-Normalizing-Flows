@@ -78,3 +78,10 @@ class CIFAR10CNN(nn.Module):
         x = self.fc3(x).view(b_size, -1)
         return x
 
+
+class IdentityNN(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, context=None):
+        return x

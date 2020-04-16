@@ -13,9 +13,6 @@ import math
 import torch.nn as nn
 from UMNN import UMNNMAFFlow
 
-torch.backends.cudnn.benchmark = False
-
-
 def batch_iter(X, batch_size, shuffle=False):
     """
     X: feature tensor (shape: num_instances x num_features)
@@ -106,11 +103,11 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
             net = None
         emb_nets.append(net)
     l1_weight = l1
-    dev = "cuda:0" if torch.cuda.is_available() else "cpu"
+    master_device = "cuda:0" if torch.cuda.is_available() else "cpu"
     model = nn.DataParallel(DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_nets=emb_nets,
-                  device=dev, l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net,
+                  device=master_device, l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net,
                   gumble_T=gumble_T, hutchinson=hutchinson, dropping_factors=dropping_factors, img_sizes=img_sizes),
-                            device_ids=list(range(n_gpu))).to(dev)
+                            device_ids=list(range(n_gpu))).to(master_device)
 
     if min_pre_heating_epochs > 0:
         model.dag_const = 0.
@@ -130,13 +127,6 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 net.dag_embedding.get_dag().stoch_gate = False
                 net.dag_embedding.get_dag().noise_gate = False
                 net.dag_embedding.get_dag().s_thresh = False
-
-
-
-    logger.info("Loading data...")
-    train_dl, valid_dl, test_dl = load_data()
-    dim = 28**2
-    logger.info("Data loaded.")
 
     for epoch in range(nb_epoch):
         ll_tot = 0
@@ -160,12 +150,9 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
 
         i = 0
         # Training loop
-        #model = nn.DataParallel(nn.Sequential(nn.Linear(28 ** 2, 100), nn.Linear(100, 100), nn.Linear(100, 1)),
-        #                        device_ids=list(range(n_gpu))).to(dev)
-
         if train:
             for batch_idx, (cur_x, target) in enumerate(train_loader):
-                cur_x = cur_x.view(-1, dim).float().to(dev)
+                cur_x = cur_x.view(-1, dim).float().to(master_device)
                 model.module.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
                 loss = model.forward(cur_x).mean() if not umnn_maf else -model.module.compute_ll(cur_x)[0].mean()
                 loss = loss/batch_per_optim_step
@@ -191,7 +178,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         with torch.no_grad():
             model.module.set_steps_nb(nb_steps + 20)
             for batch_idx, (cur_x, target) in enumerate(valid_loader):
-                cur_x = cur_x.view(-1, dim).float().to(0)
+                cur_x = cur_x.view(-1, dim).float().to(master_device)
                 ll, _ = model(cur_x, only_ll=True)
                 ll_test += ll.mean().item()
                 bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
