@@ -12,7 +12,7 @@ class IdentityNN(nn.Module):
         return x
 
 
-class DAGNN(nn.Module):
+class DAGConditionner(nn.Module):
     def __init__(self, d, device="cpu", soft_thresholding=True, h_thresh=0., net=None, gumble_T=1., hot_encoding=False):
         super().__init__()
         self.A = nn.Parameter(torch.ones(d, d, device=device)*1.5 + torch.randn((d, d), device=device)*.02)
@@ -132,12 +132,12 @@ class DAGNN(nn.Module):
                 e0 = torch.randn(self.d, 1).to(self.device)
                 e = e0
                 for i in range(self.d):
-                    e = (I + alpha*self.A**2) @ e
+                    e = (I + alpha * self.A ** 2) @ e
 
                 trace += (e0 * e).sum()
-            return trace/h_iter - self.d
+            return trace / h_iter - self.d
 
-        B = (torch.eye(self.d, device=self.device) + alpha*self.A**2)
+        B = (torch.eye(self.d, device=self.device) + alpha * self.A ** 2)
         M = torch.matrix_power(B, self.d)
         return torch.diag(M).sum() - self.d
 
@@ -150,7 +150,7 @@ class DAGEmbedding(nn.Module):
         self.device = device
         self.in_d = in_d
         self.emb_d = in_d if emb_net is None else emb_d
-        self.dag = DAGNN(in_d, net=emb_net, device=device, gumble_T=gumble_T, hot_encoding=hot_encoding)
+        self.dag = DAGConditionner(in_d, net=emb_net, device=device, gumble_T=gumble_T, hot_encoding=hot_encoding)
         self.parallel_nets = IntegrandNetwork(in_d, 1 + in_d + self.emb_d, hiddens_integrand, 1, act_func=act_func,
                                               device=device)
 
@@ -216,26 +216,29 @@ class ListModule(nn.Module):
 class DAGNF(nn.Module):
     def __init__(self, emb_nets, in_d, nb_flow=1, dropping_factors=None, img_sizes=None, **kwargs):
         super().__init__()
+
         self.device = kwargs['device']
         self.nets = nn.ModuleList()
         self.dropping_factors = dropping_factors
         self.img_sizes = img_sizes
-        self.pi = torch.tensor(math.pi).float().to(self.device)
+        self.pi = nn.Parameter(torch.tensor(math.pi, requires_grad=False).float().to(self.device))
         for i in range(nb_flow):
             dim_in = in_d if self.dropping_factors is None else img_sizes[i][0]*img_sizes[i][1]*img_sizes[i][2]
             model = DAGStep(emb_net=emb_nets[i], in_d=dim_in, **kwargs)
             self.nets.append(model)
 
-    def to(self, device):
-        self.device = device
-        self.nets.to(device)
-        return self
+    #def to(self, device):
+    #    self.device = device
+    #    self.nets.to(device)
+    #    self.pi = self.pi.to(device)
+    #    return self
 
     def set_steps_nb(self, nb_steps):
         for net in self.nets:
             net.set_steps_nb(nb_steps)
 
     def forward(self, x, only_ll=False):
+        #return x.view(x.shape[0], -1).sum() * torch.matrix_power(torch.randn((100, 100), device=x.get_device()), 100).mean()
         if only_ll:
             return self.compute_ll(x)
         #for net in self.nets:
@@ -341,11 +344,11 @@ class DAGStep(nn.Module):
         super().__init__()
         self.linear_normalizer = linear_normalizer
         if linear_normalizer:
-            self.dag_embedding = DAGNN(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
+            self.dag_embedding = DAGConditionner(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
                                        gumble_T=gumble_T, hot_encoding=hot_encoding)
             self.normalizer = LinearNormalizer(self.dag_embedding, emb_net, in_d, device=device)
         elif cubic_normalize:
-            self.dag_embedding = DAGNN(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
+            self.dag_embedding = DAGConditionner(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
                                        gumble_T=gumble_T, hot_encoding=hot_encoding)
             self.normalizer = CubicNormalizer(self.dag_embedding, emb_net, in_d, device=device)
         else:
@@ -432,4 +435,3 @@ class DAGStep(nn.Module):
 
     def set_h_threshold(self, threshold):
         self.dag_embedding.get_dag().h_thresh = threshold
-

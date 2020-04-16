@@ -7,12 +7,13 @@ import math
 class LinearNormalizer(nn.Module):
     def __init__(self, conditioner, net, input_size, device="cpu"):
         super(LinearNormalizer, self).__init__()
+        #self.model = nn.Sequential(nn.Linear(28**2, 100), nn.Linear(100, 100), nn.Linear(100, 1))
         self.conditioner = conditioner.to(device)
         self.device = device
         self.linear_net = net
         self.input_size = input_size
         self.d = input_size
-        self.pi = torch.tensor(math.pi).to(self.device)
+        self.pi = nn.Parameter(torch.tensor(math.pi).to(self.device), requires_grad=False)
 
     def forward(self, x, context=None):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
@@ -20,9 +21,7 @@ class LinearNormalizer(nn.Module):
         mu, sigma = trans[:, :, 0], torch.exp(trans[:, :, 1])
         sigma.clamp_(-5., 2.)
         mu.clamp_(-5., 5.)
-        #sigma.clamp_(-3., 3.)
         z = x * sigma + mu
-        #z.clamp_(-10., 10.)
         return z
 
     def compute_log_jac(self, x, context=None):
@@ -31,33 +30,24 @@ class LinearNormalizer(nn.Module):
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
         sigma.clamp_(-5., 2.)
         mu.clamp_(-5., 5.)
-        #sigma.clamp_(-3., 3.)
         return sigma
 
     def compute_log_jac_bis(self, x, context=None):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
-        #print(sigma.mean(0))
-
         sigma.clamp_(-5., 2.)
         mu.clamp_(-5., 5.)
         z = x * torch.exp(sigma) + mu
-        #print(z.max(), "-", sigma.max(), "-", mu.max())
-        #z.clamp_(-10., 10.)
         return z, sigma
 
     def compute_ll(self, x, context=None):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
-        #print(sigma.mean(0))
         sigma.clamp_(-5., 2.)
         mu.clamp_(-5., 5.)
-        #sigma.clamp_(-3., 3.)
         z = x * torch.exp(sigma) + mu
-
-        #z.clamp_(-10., 10.)
         log_prob_gauss = -.5 * (torch.log(self.pi * 2) + z ** 2).sum(1)
         ll = log_prob_gauss + sigma.sum(1)
 
@@ -68,13 +58,8 @@ class LinearNormalizer(nn.Module):
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
         mu, sigma = trans[:, :, 0], trans[:, :, 1]
         sigma.clamp_(-5., 2.)
-        #print(sigma.mean(0))
-
         mu.clamp_(-5., 5.)
-        #sigma.clamp_(-3., 3.)
         z = x * torch.exp(sigma) + mu
-
-        #z.clamp_(-10., 10.)
         log_prob_gauss = -.5 * (torch.log(self.pi * 2) + z ** 2).sum(1)
         ll = log_prob_gauss + sigma.sum(1)
 

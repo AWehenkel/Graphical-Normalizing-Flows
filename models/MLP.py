@@ -54,16 +54,6 @@ class MNISTCNN(nn.Module):
         x = self.fc2(x).view(b_size, -1)
         return x
 
-    def to(self, device):
-        self.conv1.to(device)
-        self.conv2.to(device)
-        self.dropout1.to(device)
-        self.dropout2.to(device)
-        self.fc1.to(device)
-        self.fc2.to(device)
-        self.device = device
-        return self
-
 class CIFAR10CNN(nn.Module):
     def __init__(self, out_d=10, device="cpu", fc_l=[400, 128, 84], size_img=[3, 32, 32], k_size=5):
         super(CIFAR10CNN, self).__init__()

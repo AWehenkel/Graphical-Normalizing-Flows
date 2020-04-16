@@ -13,6 +13,8 @@ import math
 import torch.nn as nn
 from UMNN import UMNNMAFFlow
 
+torch.backends.cudnn.benchmark = False
+
 
 def batch_iter(X, batch_size, shuffle=False):
     """
@@ -110,8 +112,6 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                   gumble_T=gumble_T, hutchinson=hutchinson, dropping_factors=dropping_factors, img_sizes=img_sizes),
                             device_ids=list(range(n_gpu))).to(dev)
 
-    #print("test")
-    #model.to(device)
     if min_pre_heating_epochs > 0:
         model.dag_const = 0.
     opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
@@ -160,6 +160,9 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
 
         i = 0
         # Training loop
+        #model = nn.DataParallel(nn.Sequential(nn.Linear(28 ** 2, 100), nn.Linear(100, 100), nn.Linear(100, 1)),
+        #                        device_ids=list(range(n_gpu))).to(dev)
+
         if train:
             for batch_idx, (cur_x, target) in enumerate(train_loader):
                 cur_x = cur_x.view(-1, dim).float().to(dev)
@@ -168,8 +171,6 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 loss = loss/batch_per_optim_step
                 if math.isnan(loss.item()):
                     print("Error Nan in loss")
-                    #print(loss.item())
-                    #print(model.compute_ll(cur_x))
                     exit()
                 ll_tot += loss.item()
                 i += 1
