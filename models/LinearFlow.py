@@ -13,15 +13,15 @@ class LinearNormalizer(nn.Module):
         self.linear_net = net
         self.input_size = input_size
         self.d = input_size
-        self.pi = nn.Parameter(torch.tensor(math.pi).to(self.device), requires_grad=False)
+        self.register_buffer("pi", torch.tensor(math.pi))
 
     def forward(self, x, context=None):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()
         trans = self.linear_net.forward(cond.view(x.shape[0] * self.d, -1)).view(x.shape[0], -1, 2)
-        mu, sigma = trans[:, :, 0], torch.exp(trans[:, :, 1])
+        mu, sigma = trans[:, :, 0], trans[:, :, 1]
         sigma.clamp_(-5., 2.)
         mu.clamp_(-5., 5.)
-        z = x * sigma + mu
+        z = x * torch.exp(sigma) + mu
         return z
 
     def compute_log_jac(self, x, context=None):
@@ -86,7 +86,7 @@ class CubicNormalizer(nn.Module):
         self.linear_net = net
         self.input_size = input_size
         self.d = input_size
-        self.pi = torch.tensor(math.pi).to(self.device)
+        self.register_buffer("pi", torch.tensor(math.pi))
 
     def forward(self, x, context=None):
         cond = self.conditioner(x, context).view(x.shape[0], -1, self.d).permute(0, 2, 1).contiguous()

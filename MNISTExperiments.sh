@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --gres=gpu:2
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-gpu=2
 #SBATCH --job-name "DAG-NF-MNIST"
 #SBATCH --mem=12G
 #SBATCH --time=144:00:00

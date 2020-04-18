@@ -13,6 +13,7 @@ import math
 import torch.nn as nn
 from UMNN import UMNNMAFFlow
 
+
 def batch_iter(X, batch_size, shuffle=False):
     """
     X: feature tensor (shape: num_instances x num_features)
@@ -104,9 +105,10 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         emb_nets.append(net)
     l1_weight = l1
     master_device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    model = nn.DataParallel(DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_nets=emb_nets,
-                  device=master_device, l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net,
-                  gumble_T=gumble_T, hutchinson=hutchinson, dropping_factors=dropping_factors, img_sizes=img_sizes),
+    model = nn.DataParallel(DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d,
+                                  emb_nets=emb_nets, l1_weight=l1, nb_steps=nb_steps, solver=solver,
+                                  linear_normalizer=linear_net, gumble_T=gumble_T, hutchinson=hutchinson,
+                                  dropping_factors=dropping_factors, img_sizes=img_sizes),
                             device_ids=list(range(n_gpu))).to(master_device)
 
     if min_pre_heating_epochs > 0:
@@ -137,7 +139,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
             with torch.no_grad():
                 model.module.constrainA(zero_threshold=0.)
 
-        if epoch % nb_step_dual == 0 and epoch != 0 and not umnn_maf and epoch > min_pre_heating_epochs:
+        if True or epoch % nb_step_dual == 0 and epoch != 0 and not umnn_maf and epoch > min_pre_heating_epochs:
             model.module.update_dual_param()
 
         if not umnn_maf:
@@ -145,7 +147,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 dagness = net.DAGness()
                 if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
                     #net.l1_weight = .1
-                    net.dag_const = 1.
+                    net.dag_const.data = torch.tensor(1., device=net.dag_const.device)
                     logger.info("Dagness constraint set on.")
 
         i = 0
@@ -155,18 +157,22 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 cur_x = cur_x.view(-1, dim).float().to(master_device)
                 model.module.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
                 loss = model.forward(cur_x).mean() if not umnn_maf else -model.module.compute_ll(cur_x)[0].mean()
-                loss = loss/batch_per_optim_step
+                loss = loss/(batch_per_optim_step * n_gpu)
                 if math.isnan(loss.item()):
                     print("Error Nan in loss")
+                    for step in model.module.nets:
+                        print("Dagness:", step.DAGness())
                     exit()
                 ll_tot += loss.item()
                 i += 1
                 if batch_idx % batch_per_optim_step == 0:
                     opt.zero_grad()
+
                 loss.backward(retain_graph=True)
                 if (batch_idx + 1) % batch_per_optim_step == 0:
                     opt.step()
-
+            for step in model.module.nets:
+                print("Dagness:", step.DAGness())
             ll_tot /= i
         else:
             ll_tot = 0.

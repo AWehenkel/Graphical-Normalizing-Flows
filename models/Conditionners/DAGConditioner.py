@@ -4,8 +4,25 @@ from .Conditioner import Conditioner
 from models.MLP import IdentityNN
 
 
+class DAGMLP(nn.Module):
+    def __init__(self, in_size, hidden, out_size, cond_in=0):
+        super(DAGMLP, self).__init__()
+        in_size = in_size
+        l1 = [in_size + cond_in] + hidden
+        l2 = hidden + [out_size]
+        layers = []
+        for h1, h2 in zip(l1, l2):
+            layers += [nn.Linear(h1, h2), nn.ReLU()]
+        layers.pop()
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.net(x)
+
+
 class DAGConditioner(Conditioner):
-    def __init__(self, in_size, soft_thresholding=True, h_thresh=0., embedding_net=None, gumble_T=1., hot_encoding=False):
+    def __init__(self, in_size, hidden, out_size, cond_in=0, soft_thresholding=True, h_thresh=0., gumble_T=1.,
+                 hot_encoding=False, l1_weight=0., nb_epoch_update=1):
         super(DAGConditioner, self).__init__()
         self.A = nn.Parameter(torch.ones(in_size, in_size) * 1.5 + torch.randn((in_size, in_size)) * .02)
         self.in_size = in_size
@@ -13,12 +30,31 @@ class DAGConditioner(Conditioner):
         self.h_thresh = h_thresh
         self.stoch_gate = True
         self.noise_gate = False
-        self.embedding_net = embedding_net if embedding_net is not None else IdentityNN()
+        in_net = in_size*2 if hot_encoding else in_size
+        self.embedding_net = DAGMLP(in_net, hidden, out_size, cond_in)
         self.gumble = True
+        self.hutchinson = False
         self.gumble_T = gumble_T
         self.hot_encoding = hot_encoding
         with torch.no_grad():
             self.constrainA(h_thresh)
+        # Buffers related to the optimization of the constraints on A
+        self.register_buffer("lambd", torch.tensor(.0))
+        self.register_buffer("c", torch.tensor(1e-3))
+        self.register_buffer("eta", torch.tensor(10.))
+        self.register_buffer("gamma", torch.tensor(.9))
+        self.register_buffer("lambd", torch.tensor(.0))
+        self.register_buffer("l1_weight", torch.tensor(l1_weight))
+        self.d = in_size
+        self.tol = 1e-20
+        _, S, _ = torch.svd(self.dag_embedding.get_dag().A)
+        sigma_max = S.max().item()
+        self.register_buffer("alpha", torch.tensor(1. / sigma_max ** 2))
+        self.alpha = (self.c / self.d)
+        self.register_buffer("prev_trace", self.get_power_trace())
+        self.alpha = 1. / sigma_max ** 2
+
+        self.nb_epoch_update = nb_epoch_update
 
     def get_dag(self):
         return self
@@ -96,20 +132,23 @@ class DAGConditioner(Conditioner):
                 .view(x.shape[0] * self.in_size, -1)
 
         if self.hot_encoding:
-            hot_encoding = torch.eye(self.in_size).unsqueeze(0).expand(x.shape[0], -1, -1).contiguous().view(-1, self.in_size).to(self.device)
+            hot_encoding = torch.eye(self.in_size, device=self.A.device).unsqueeze(0).expand(x.shape[0], -1, -1)\
+                .contiguous().view(-1, self.in_size)
             full_e = torch.cat((e, hot_encoding), 1)
-            return self.embedding_net(full_e, context).view(x.shape[0], self.in_size, -1)#.permute(0, 2, 1).contiguous().view(x.shape[0], -1)
+            # TODO Add context
+            return self.embedding_net(full_e).view(x.shape[0], self.in_size, -1)#.permute(0, 2, 1).contiguous().view(x.shape[0], -1)
 
-        return self.embedding_net(e, context).view(x.shape[0], self.in_size, -1)#.permute(0, 2, 1).contiguous().view(x.shape[0], -1)
+        return self.embedding_net(e).view(x.shape[0], self.in_size, -1)#.permute(0, 2, 1).contiguous().view(x.shape[0], -1)
 
     def constrainA(self, zero_threshold=.0001):
         self.A *= (self.A.clone().abs() > zero_threshold).float()
         self.A *= 1. - torch.eye(self.in_size, device=self.A.device)
         return
 
-    def get_power_trace(self, alpha, hutchinson=0):
-        if hutchinson != 0:
-            h_iter = hutchinson
+    def get_power_trace(self):
+        alpha = min(1, self.alpha)
+        if self.hutchinson != 0:
+            h_iter = self.hutchinson
             trace = 0.
             I = torch.eye(self.in_size, device=self.A.device)
             for j in range(h_iter):
@@ -124,3 +163,35 @@ class DAGConditioner(Conditioner):
         B = (torch.eye(self.in_size, device=self.A.device) + alpha * self.A ** 2)
         M = torch.matrix_power(B, self.in_size)
         return torch.diag(M).sum() - self.in_size
+
+    def update_dual_param(self):
+        with torch.no_grad():
+            _, S, _ = torch.svd(self.A)
+            sigma_max = S.max().item()
+            self.alpha = 1./sigma_max**2
+            lag_const = self.get_power_trace()
+            if self.dag_const > 0. and lag_const > self.tol:
+                self.lambd = self.lambd + self.c * lag_const
+                # Absolute does not make sense (but copied from DAG-GNN)
+                if lag_const.abs() > self.gamma*self.prev_trace.abs():
+                    self.c *= self.eta
+                print(self.c)
+                self.prev_trace = lag_const
+            elif self.dag_const > 0.:
+                print("DAGness is very low: %f" % torch.log(lag_const), flush=True)
+        return lag_const
+
+    def loss(self):
+        lag_const = self.get_power_trace()
+        print(lag_const)
+        loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) + self.l1_weight*self.A.abs().mean()
+        return loss
+
+    def step(self, epoch_number, loss_avg=0.):
+        if epoch_number % self.nb_epoch_update == 0:
+            print(self.soft_thresholded_A())
+            _, S, _ = torch.svd(self.A)
+            sigma_max = S.max().item()
+            self.alpha = 1. / sigma_max ** 2
+            if self.loss().abs() < loss_avg.abs()/10:
+                self.update_dual_param()

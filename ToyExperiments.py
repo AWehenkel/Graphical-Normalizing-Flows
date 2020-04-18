@@ -1,5 +1,5 @@
 import lib.toy_data as toy_data
-from models import DAGNF, MLP
+from models import *
 import torch
 from timeit import default_timer as timer
 import lib.utils as utils
@@ -27,43 +27,34 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
     dim = x.shape[1]
     linear_net = True
-    nb_flow = 10
+    nb_flow = 1
     emb_net = [100, 100, 100, 100, 100, 2]
     emb_nets = []
     for i in range(nb_flow):
         if emb_net is not None:
-            net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
+            step = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
         else:
-            net = None
-        emb_nets.append(net)
+            step = None
+        emb_nets.append(step)
 
     model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=emb_nets[0].out_d, emb_nets=emb_nets, device=device,
                   l1_weight=l1, nb_steps=nb_steps, linear_normalizer=linear_net)
     model.dag_const = 0.
 
-    if True:
-        i = 0
-        for net in model.nets:
-            with torch.no_grad():
-                print("coucou")
-                A = torch.zeros(2, 2)
-                if i % 2 == 0:
-                    A[1, 0] = 1.
-                    #A[2, 0] = 1.
-                else:
-                    A[0, 1] = 1.
-                    #A[0, 2] = 1.
-                i += 1
-                net.getDag().stoch_gate = False
-                net.getDag().s_thresh = False
-                net.getDag().h_thresh = 0.
-                net.getDag().post_process(1e-3)
-                net.dag_embedding.get_dag().A.data = A.float().to(device)
-                net.dag_const = 0.
-                net.getDag().gumble = False
+    conditioner_type = DAGConditioner
+    conditioner_args = {"in_size": dim, "hidden": [200, 200, 200, 200], "out_size": 2, "gumble_T": 1., "hot_encoding": True,
+                        "nb_epoch_update": nb_step_dual}
+    #conditioner_type = CouplingConditioner
+    #conditioner_args = {"in_size": dim, "hidden": [50, 50, 50], "out_size": 2}
+    #normalizer_type = MonotonicNormalizer
+    #normalizer_args = {"integrand_net": [50, 50, 50], "cond_size": 10, "nb_steps": 10, "solver": "CCParallel"}
+    normalizer_type = AffineNormalizer
+    normalizer_args = {}
+    model = buildFCNormalizingFlow(1, conditioner_type, conditioner_args, normalizer_type, normalizer_args)
+    print(model)
+    #exit()
 
-    opt = torch.optim.Adam(model.parameters(), 1e-4, weight_decay=1e-5)
-    #opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
+    opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
 
     if load:
         logger.info("Loading model...")
@@ -73,17 +64,19 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         logger.info("Model loaded.")
 
     if True:
-        for net in model.nets:
-            net.getDag().stoch_gate = True
-            net.getDag().noise_gate = False
-            net.getDag().gumble_T = .5
+        for step in model.steps:
+            step.conditioner.stoch_gate = True
+            step.conditioner.noise_gate = False
+            step.conditioner.gumble_T = .5
+    torch.autograd.set_detect_anomaly(True)
     for epoch in range(nb_epoch):
-        ll_tot = 0
+        loss_tot = 0
         start = timer()
         for j in range(0, nb_samp, batch_size):
             cur_x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=batch_size)).to(device)
-            loss = model.loss(cur_x)
-            ll_tot += loss.item()
+            z, log_p_x = model(cur_x)
+            loss = model.loss(z, log_p_x)
+            loss_tot += loss.detach()
             if math.isnan(loss.item()):
                 ll, z = model.compute_ll(cur_x)
                 print(ll)
@@ -93,26 +86,18 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
             opt.zero_grad()
             loss.backward(retain_graph=True)
             opt.step()
-        if epoch % 1 == 0:
-            with torch.no_grad():
-                model.constrainA(zero_threshold=0.)
+        model.step(epoch, loss_tot)
 
-        if epoch % nb_step_dual == 0 and epoch > pre_heating_epochs:
-            model.update_dual_param()
 
         end = timer()
-        ll_test, _ = model.compute_ll(x_test)
-        ll_test = -ll_test.mean()
+        _, ll_test = model(x_test)
+        ll_test = ll_test.mean()
         dagness = max(model.DAGness())
-        if epoch > pre_heating_epochs:
-            for net in model.nets:
-                net.l1_weight = .0
-                net.dag_const = 1.
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
-                    format(epoch, ll_tot, ll_test.item(), dagness, end-start))
+                    format(epoch, loss_tot.item(), ll_test.item(), dagness, end-start))
 
 
-        if epoch % 100 == 0:
+        if epoch % 100 == 0 and False:
             with torch.no_grad():
                 stoch_gate = model.getDag().stoch_gate
                 noise_gate = model.getDag().noise_gate
@@ -138,11 +123,13 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
             if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians", "2gaussians", "2igaussians", "8gaussians"]:
                 def compute_ll_2spirals(x):
                     if toy in ["2gaussians", "8gaussians", "2igaussians"]:
-                        return model.compute_ll(x.to(device))
+                        z, ll = model(x.to(device))
+                        return ll, z
                     return model.compute_ll(torch.cat((x, torch.zeros(x.shape[0], dim-2).to(device)), 1))
                 def compute_ll_8gaussians(x):
                     if toy in ["2gaussians", "8gaussians", "2igaussians"]:
-                        return model.compute_ll(x.to(device))
+                        z, ll = model(x.to(device))
+                        return ll, z
                     return model.compute_ll(torch.cat((torch.zeros(x.shape[0], dim-2).to(device), x), 1))
                 with torch.no_grad():
                     npts = 100
@@ -162,41 +149,42 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
                     'size': 12}
 
             matplotlib.rc('font', **font)
-            for net in model.nets:
-                A_normal = net.getDag().soft_thresholded_A().detach().cpu().numpy().T
-                print(A_normal)
-                #logger.info(str(A_normal))
-                A_thresholded = A_normal * (A_normal > .001)
-                j = 0
-                for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
-                    #A /= A.sum() / np.log(dim)
+            if False:
+                for step in model.step:
+                    A_normal = step.getDag().soft_thresholded_A().detach().cpu().numpy().T
+                    print(A_normal)
+                    #logger.info(str(A_normal))
+                    A_thresholded = A_normal * (A_normal > .001)
+                    j = 0
+                    for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
+                        #A /= A.sum() / np.log(dim)
 
-                    ax = plt.subplot(2, 2, 1 + j)
-                    plt.title(name + " DAG")
-                    G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-                    pos = nx.layout.spring_layout(G)
-                    nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
-                    if nx.get_edge_attributes(G, 'weight').items() is not None:
-                        edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-                    nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
-                                                   arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                                   edge_cmap=plt.cm.Blues, width=5*weights)
-                    labels = {}
-                    for i in range(dim):
-                        labels[i] = str(r'$%d$' % i)
-                    nx.draw_networkx_labels(G, pos, labels, font_size=12)
+                        ax = plt.subplot(2, 2, 1 + j)
+                        plt.title(name + " DAG")
+                        G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
+                        pos = nx.layout.spring_layout(G)
+                        nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
+                        if nx.get_edge_attributes(G, 'weight').items() is not None:
+                            edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
+                        nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
+                                                       arrowsize=3, connectionstyle='arc3,rad=0.2',
+                                                       edge_cmap=plt.cm.Blues, width=5*weights)
+                        labels = {}
+                        for i in range(dim):
+                            labels[i] = str(r'$%d$' % i)
+                        nx.draw_networkx_labels(G, pos, labels, font_size=12)
 
-                    ax = plt.subplot(2, 2, 2 + j)
-                    out = ax.matshow(np.log(A))
-                    plt.colorbar(out, ax=ax)
-                    j += 2
+                        ax = plt.subplot(2, 2, 2 + j)
+                        out = ax.matshow(np.log(A))
+                        plt.colorbar(out, ax=ax)
+                        j += 2
 
-                #vf.plt_flow(model.compute_ll, ax)
-                #plt.savefig("%s%s/DAG_%d.pdf" % (folder, toy, epoch))
-                torch.save(model.state_dict(), folder + toy + '/model.pt')
-                torch.save(opt.state_dict(), folder + toy + '/ADAM.pt')
-                G.clear()
-                plt.clf()
+                    #vf.plt_flow(model.compute_ll, ax)
+                    #plt.savefig("%s%s/DAG_%d.pdf" % (folder, toy, epoch))
+                    torch.save(model.state_dict(), folder + toy + '/model.pt')
+                    torch.save(opt.state_dict(), folder + toy + '/ADAM.pt')
+                    G.clear()
+                    plt.clf()
 
 
 toy = "8gaussians"

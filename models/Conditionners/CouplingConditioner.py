@@ -1,4 +1,4 @@
-from Conditioner import Conditioner
+from .Conditioner import Conditioner
 import torch
 import torch.nn as nn
 
@@ -19,13 +19,13 @@ class CouplingMLP(nn.Module):
 
 
 class CouplingConditioner(Conditioner):
-    def __init__(self, in_size, embedding_net, out_size):
+    def __init__(self, in_size, hidden, out_size, cond_in=0):
         super(CouplingConditioner, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
         self.cond_size = int(in_size/2)
         self.indep_size = in_size - self.cond_size
-        self.embeding_net = embedding_net
+        self.embeding_net = CouplingMLP(in_size, hidden, out_size, cond_in)
         self.constants = nn.Parameter(torch.randn(self.indep_size, out_size))
 
     def forward(self, x, context=None):

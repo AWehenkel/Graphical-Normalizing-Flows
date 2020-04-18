@@ -5,7 +5,7 @@ Modified by Antoine Wehenkel
 """
 
 import numpy as np
-from Conditioner import Conditioner
+from .Conditioner import Conditioner
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -142,9 +142,9 @@ class ConditionnalMADE(MADE):
 
 
 class AutoregressiveConditioner(Conditioner):
-    def __init__(self, in_size, hidden_sizes, out_size, cond_in=0):
+    def __init__(self, in_size, hidden, out_size, cond_in=0):
         super(AutoregressiveConditioner, self).__init__()
-        self.masked_autoregressive_net = ConditionnalMADE(in_size, cond_in=cond_in, hidden_sizes=hidden_sizes, nout=out_size*in_size)
+        self.masked_autoregressive_net = ConditionnalMADE(in_size, cond_in=cond_in, hidden_sizes=hidden, nout=out_size*in_size)
 
     def forward(self, x, context=None):
         return self.masked_autoregressive_net(x, context)

@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --gres=gpu:2
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-gpu=2
 #SBATCH --job-name "DAG-NF-CIFAR10"
-#SBATCH --mem=12000M
+#SBATCH --mem=12G
 #SBATCH --time=144:00:00
 #SBATCH --output="DAG-NF-CIFAR10-%j.out"
 int_net=$5

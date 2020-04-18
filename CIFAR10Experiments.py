@@ -157,7 +157,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 cur_x = cur_x.view(-1, dim).float().to(master_device)
                 model.module.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
                 loss = model(cur_x).mean() if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
-                loss = loss/batch_per_optim_step
+                loss = loss/(batch_per_optim_step * n_gpu)
                 if math.isnan(loss.item()):
                     print("ici")
                     print(loss.item())

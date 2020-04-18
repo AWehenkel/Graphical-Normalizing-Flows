@@ -13,11 +13,10 @@ class IdentityNN(nn.Module):
 
 
 class DAGConditionner(nn.Module):
-    def __init__(self, d, device="cpu", soft_thresholding=True, h_thresh=0., net=None, gumble_T=1., hot_encoding=False):
+    def __init__(self, d, soft_thresholding=True, h_thresh=0., net=None, gumble_T=1., hot_encoding=False):
         super().__init__()
-        self.A = nn.Parameter(torch.ones(d, d, device=device)*1.5 + torch.randn((d, d), device=device)*.02)
+        self.A = nn.Parameter(torch.ones(d, d)*1.5 + torch.randn((d, d))*.02)
         self.d = d
-        self.device = device
         self.s_thresh = soft_thresholding
         self.h_thresh = h_thresh
         self.stoch_gate = True
@@ -29,11 +28,6 @@ class DAGConditionner(nn.Module):
         with torch.no_grad():
             self.constrainA(h_thresh)
 
-    def to(self, device):
-        self.A.to(device)
-        self.device = device
-        return self
-
     def get_dag(self):
         return self
 
@@ -43,7 +37,7 @@ class DAGConditionner(nn.Module):
         self.s_thresh = False
         self.h_thresh = 0.
         self.A *= (self.soft_thresholded_A().clone().abs() > zero_threshold).float()
-        self.A *= 1. - torch.eye(self.d, device=self.device)
+        self.A *= 1. - torch.eye(self.d, device=self.A.device)
         self.A /= self.A + (self.A == 0).float()
         self.A.requires_grad = False
         self.A.grad = None
@@ -53,8 +47,8 @@ class DAGConditionner(nn.Module):
             # Gumble soft-max gate
             temp = self.gumble_T
             epsilon = 1e-6
-            g1 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
-            g2 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.device)))
+            g1 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.A.device)))
+            g2 = -torch.log(-torch.log(torch.rand(importance.shape, device=self.A.device)))
             z1 = torch.exp((torch.log(importance + epsilon) + g1)/temp)
             z2 = torch.exp((torch.log(1 - importance + epsilon) + g2)/temp)
             return z1 / (z1 + z2)
@@ -63,17 +57,17 @@ class DAGConditionner(nn.Module):
             beta_1, beta_2 = 3., 10.
             sigma = beta_1/(1. + beta_2*torch.sqrt((importance - .5)**2.))
             mu = importance
-            z = torch.randn(importance.shape, device=self.device) * sigma + mu + .25
+            z = torch.randn(importance.shape, device=self.A.device) * sigma + mu + .25
             #non_importance = torch.sqrt((importance - 1.)**2)
             #z = z - non_importance/beta_1
             return torch.relu(z.clamp_max(1.))
 
     def noiser_gate(self, x, importance):
-        noise = torch.randn(importance.shape, device=self.device) * torch.sqrt((1 - importance)**2)
+        noise = torch.randn(importance.shape, device=self.A.device) * torch.sqrt((1 - importance)**2)
         return importance*(x + noise)
 
     def soft_thresholded_A(self):
-        return 2*(torch.sigmoid(2*(self.A**2)) -.5)
+        return 2*(torch.sigmoid(2*(self.A**2)) - .5)
 
     def hard_thresholded_A(self):
         if self.s_thresh:
@@ -81,7 +75,6 @@ class DAGConditionner(nn.Module):
         return self.A**2 * (self.A**2 > self.h_thresh).float()
 
     def forward(self, x, context=None):
-        self.device = "cpu" if not(self.A.is_cuda) else "cuda:%d" % self.A.get_device()
         if self.h_thresh > 0:
             if self.stoch_gate:
                 e = (x.unsqueeze(1).expand(-1, self.d, -1) * self.stochastic_gate(self.hard_thresholded_A().unsqueeze(0)
@@ -111,7 +104,7 @@ class DAGConditionner(nn.Module):
                 .view(x.shape[0]*self.d, -1)
 
         if self.hot_encoding:
-            hot_encoding = torch.eye(self.d).unsqueeze(0).expand(x.shape[0], -1, -1).contiguous().view(-1, self.d).to(self.device)
+            hot_encoding = torch.eye(self.d).unsqueeze(0).expand(x.shape[0], -1, -1).contiguous().view(-1, self.d).to(self.A.device)
             full_e = torch.cat((e, hot_encoding), 1)
             return self.net(full_e, context).view(x.shape[0], self.d, -1).permute(0, 2, 1).contiguous().view(x.shape[0], -1)
 
@@ -120,16 +113,16 @@ class DAGConditionner(nn.Module):
     def constrainA(self, zero_threshold=.0001):
         #self.A /= (self.A.sum(1).unsqueeze(1).expand(-1, self.d) + 1e-5)
         self.A *= (self.A.clone().abs() > zero_threshold).float()
-        self.A *= 1. - torch.eye(self.d, device=self.device)
+        self.A *= 1. - torch.eye(self.d, device=self.A.device)
         return
 
     def get_power_trace(self, alpha, hutchinson=0):
         if hutchinson != 0:
             h_iter = hutchinson
             trace = 0.
-            I = torch.eye(self.d, device=self.device)
+            I = torch.eye(self.d, device=self.A.device)
             for j in range(h_iter):
-                e0 = torch.randn(self.d, 1).to(self.device)
+                e0 = torch.randn(self.d, 1).to(self.A.device)
                 e = e0
                 for i in range(self.d):
                     e = (I + alpha * self.A ** 2) @ e
@@ -137,34 +130,27 @@ class DAGConditionner(nn.Module):
                 trace += (e0 * e).sum()
             return trace / h_iter - self.d
 
-        B = (torch.eye(self.d, device=self.device) + alpha * self.A ** 2)
+        B = (torch.eye(self.d, device=self.A.device) + alpha * self.A ** 2)
         M = torch.matrix_power(B, self.d)
         return torch.diag(M).sum() - self.d
 
 
 class DAGEmbedding(nn.Module):
-    def __init__(self, in_d, emb_d=-1, emb_net=None, hiddens_integrand=[50, 50, 50, 50], act_func='ELU', device="cpu",
+    def __init__(self, in_d, emb_d=-1, emb_net=None, hiddens_integrand=[50, 50, 50, 50], act_func='ELU',
                  gumble_T=1., hot_encoding=False):
         super().__init__()
         self.m_embeding = None
-        self.device = device
         self.in_d = in_d
         self.emb_d = in_d if emb_net is None else emb_d
-        self.dag = DAGConditionner(in_d, net=emb_net, device=device, gumble_T=gumble_T, hot_encoding=hot_encoding)
-        self.parallel_nets = IntegrandNetwork(in_d, 1 + in_d + self.emb_d, hiddens_integrand, 1, act_func=act_func,
-                                              device=device)
+        self.dag = DAGConditionner(in_d, net=emb_net, gumble_T=gumble_T, hot_encoding=hot_encoding)
+        self.parallel_nets = IntegrandNetwork(in_d, 1 + in_d + self.emb_d, hiddens_integrand, 1, act_func=act_func)
 
     def get_dag(self):
         return self.dag
 
-    def to(self, device):
-        self.dag.to(device)
-        self.parallel_nets.to(device)
-        return self
-
     def make_embeding(self, x_made, context=None):
         b_size = x_made.shape[0]
-        self.m_embeding = torch.cat((self.dag.forward(x_made), torch.eye(self.in_d, device=self.device).unsqueeze(0)
+        self.m_embeding = torch.cat((self.dag.forward(x_made), torch.eye(self.in_d, device=x_made.device).unsqueeze(0)
                                      .expand(b_size, -1, -1).view(b_size, -1)), 1)
         return self.m_embeding
 
@@ -172,77 +158,26 @@ class DAGEmbedding(nn.Module):
         return self.parallel_nets.forward(x_t, self.m_embeding)
 
 
-class ListModule(nn.Module):
-    def __init__(self, *args):
-        super(ListModule, self).__init__()
-        idx = 0
-        for module in args:
-            self.add_module(str(idx), module)
-            idx += 1
-    def __init__(self, module, prefix, *args):
-        """
-        The ListModule class is a container for multiple nn.Module.
-        :nn.Module module: A module to add in the list
-        :string prefix:
-        :list of nn.module args: Other modules to add in the list
-        """
-        self.module = module
-        self.prefix = prefix
-        self.num_module = 0
-        for new_module in args:
-            self.append(new_module)
-
-    def append(self, new_module):
-        if not isinstance(new_module, nn.Module):
-            raise ValueError('Not a Module')
-        else:
-            self.module.add_module(self.prefix + str(self.num_module), new_module)
-            self.num_module += 1
-
-    def to(self, device):
-        for module in self:
-            module.to(device)
-
-    def __len__(self):
-        return self.num_module
-
-    def __getitem__(self, i):
-        i = self.num_module + i if i < 0 else i
-        if i < 0 or i >= self.num_module:
-            raise IndexError('Out of bound')
-        return getattr(self.module, self.prefix + str(i))
-
-
 class DAGNF(nn.Module):
     def __init__(self, emb_nets, in_d, nb_flow=1, dropping_factors=None, img_sizes=None, **kwargs):
         super().__init__()
 
-        self.device = kwargs['device']
         self.nets = nn.ModuleList()
         self.dropping_factors = dropping_factors
         self.img_sizes = img_sizes
-        self.pi = nn.Parameter(torch.tensor(math.pi, requires_grad=False).float().to(self.device))
+        self.register_buffer("pi", torch.tensor(math.pi, dtype=torch.float))
         for i in range(nb_flow):
             dim_in = in_d if self.dropping_factors is None else img_sizes[i][0]*img_sizes[i][1]*img_sizes[i][2]
             model = DAGStep(emb_net=emb_nets[i], in_d=dim_in, **kwargs)
             self.nets.append(model)
-
-    #def to(self, device):
-    #    self.device = device
-    #    self.nets.to(device)
-    #    self.pi = self.pi.to(device)
-    #    return self
 
     def set_steps_nb(self, nb_steps):
         for net in self.nets:
             net.set_steps_nb(nb_steps)
 
     def forward(self, x, only_ll=False):
-        #return x.view(x.shape[0], -1).sum() * torch.matrix_power(torch.randn((100, 100), device=x.get_device()), 100).mean()
         if only_ll:
             return self.compute_ll(x)
-        #for net in self.nets:
-        #    x = net.forward(x)
         return self.loss(x)
 
     def compute_ll(self, x):
@@ -322,7 +257,10 @@ class DAGNF(nn.Module):
                         .unfold(3, dropping[2], dropping[2]).contiguous().view(b_size, c, h, w, -1)[:, :, :, :, 0] \
                     .contiguous().view(b_size, -1)
                 log_prob_gauss = -.5 * (torch.log(self.pi * 2) + z ** 2).sum(1)
+                if math.isnan(log_prob_gauss.mean().item()):
+                    print(z.max(), z.min(), x.max(), x.min(), self.pi)
                 loss_tot += loss - log_prob_gauss
+
         return loss_tot + self.nets[-1].loss(x)
 
     def constrainA(self, zero_threshold):
@@ -339,41 +277,37 @@ class DAGNF(nn.Module):
 
 class DAGStep(nn.Module):
     def __init__(self, in_d, hidden_integrand=[50, 50, 50], emb_net=None, emb_d=-1, act_func='ELU', gumble_T=1.,
-                 nb_steps=20, solver="CCParallel", device="cpu", l1_weight=1., linear_normalizer=False,
+                 nb_steps=20, solver="CCParallel", l1_weight=1., linear_normalizer=False,
                  cubic_normalize=False, hutchinson=0, hot_encoding=False):
         super().__init__()
         self.linear_normalizer = linear_normalizer
         if linear_normalizer:
-            self.dag_embedding = DAGConditionner(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
+            self.dag_embedding = DAGConditionner(in_d, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
                                        gumble_T=gumble_T, hot_encoding=hot_encoding)
-            self.normalizer = LinearNormalizer(self.dag_embedding, emb_net, in_d, device=device)
+            self.normalizer = LinearNormalizer(self.dag_embedding, emb_net, in_d)
         elif cubic_normalize:
-            self.dag_embedding = DAGConditionner(in_d, device=device, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
+            self.dag_embedding = DAGConditionner(in_d, soft_thresholding=True, h_thresh=0., net=IdentityNN(),
                                        gumble_T=gumble_T, hot_encoding=hot_encoding)
-            self.normalizer = CubicNormalizer(self.dag_embedding, emb_net, in_d, device=device)
+            self.normalizer = CubicNormalizer(self.dag_embedding, emb_net, in_d)
         else:
-            self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func, device=device,
+            self.dag_embedding = DAGEmbedding(in_d, emb_d, emb_net, hidden_integrand, act_func,
                                               gumble_T=gumble_T, hot_encoding=hot_encoding)
-            self.normalizer = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, device=device, solver=solver)
-        self.lambd = .0
-        self.c = 1e-3
-        self.eta = 10
-        self.gamma = .9
+            self.normalizer = UMNNMAF(self.dag_embedding, in_d, nb_steps=nb_steps, solver=solver)
+
+        self.register_buffer("lambd", torch.tensor(.0))
+        self.register_buffer("c", torch.tensor(1e-3))
+        self.register_buffer("eta", torch.tensor(10.))
+        self.register_buffer("gamma", torch.tensor(.9))
+        self.register_buffer("lambd", torch.tensor(.0))
+        self.register_buffer("l1_weight", torch.tensor(l1_weight))
+
         self.d = in_d
         self.prev_trace = self.dag_embedding.get_dag().get_power_trace(self.c / self.d)
         self.tol = 1e-20
-        self.l1_weight = l1_weight
-        self.dag_const = 1.
         _, S, _ = torch.svd(self.dag_embedding.get_dag().A)
         sigma_max = S.max().item()
-        self.alpha = 1. / sigma_max ** 2
+        self.register_buffer("alpha", torch.tensor(1. / sigma_max ** 2))
         self.hutchinson = hutchinson
-
-    def to(self, device):
-        self.dag_embedding.to(device)
-        self.normalizer.to(device)
-        self.prev_trace.to(device)
-        return self
 
     def set_steps_nb(self, nb_steps):
         if not self.linear_normalizer:
@@ -402,6 +336,14 @@ class DAGStep(nn.Module):
         lag_const = self.DAGness()
         loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) - ll + \
                self.l1_weight*self.dag_embedding.get_dag().A.abs().mean()
+
+        if math.isnan(loss.mean().item()):
+            print("NAN in intermediate loss", flush=True)
+            if only_jac:
+                print("Only jac")
+                print(x, ll)
+            else:
+                print(ll, _)
         if only_jac:
             return x, loss
         return loss
@@ -416,12 +358,12 @@ class DAGStep(nn.Module):
         with torch.no_grad():
             _, S, _ = torch.svd(self.dag_embedding.get_dag().A)
             sigma_max = S.max().item()
-            self.alpha = 1./sigma_max**2
+            self.alpha = torch.tensor(1./sigma_max**2, device=self.alpha.device)
             alpha = min(1, self.alpha)
             #alpha = .1/self.d#self.c / self.d
             lag_const = self.dag_embedding.get_dag().get_power_trace(alpha)
             if self.dag_const > 0. and lag_const > self.tol:
-                self.lambd = self.lambd + self.c * lag_const
+                self.lambd += self.c * lag_const
                 # Absolute does not make sense (but copied from DAG-GNN)
                 if lag_const.abs() > self.gamma*self.prev_trace.abs():
                     self.c *= self.eta
