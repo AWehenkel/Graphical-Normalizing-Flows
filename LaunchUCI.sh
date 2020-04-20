@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-sbatch UCIExperiments.sh power 2500 10000 20 .0 150,150,150,150 100,100,30 -min_pre_heating_epochs 0 -nb_steps 20 -nb_flow 1 -gumble_T .5  -weight_decay 1e-6 -learning_rate 1e-3 -hot_encoding
+sbatch UCIExperiments.sh -dataset power -b_size 2500 -nb_epoch 10000 -emb_net 60,60,60,30 -conditioner DAG -gumble_T .5 -l1 -int_net 100,100,30 -min_pre_heating_epochs 0 -nb_steps 20 -nb_flow 1 -gumble_T .5  -weight_decay 1e-6 -learning_rate 1e-3 -hot_encoding
 sbatch UCIExperiments.sh gas 10000 10000 20 2.0 100,100,100 100,100,30 -min_pre_heating_epochs 0 -nb_steps 20 -nb_flow 1 -gumble_T .5  -weight_decay 1e-6 -learning_rate 1e-3 -hot_encoding
 sbatch UCIExperiments.sh hepmass 100 10000 20 .0 200,200,200,200 512,512,30 -min_pre_heating_epochs 0 -nb_steps 20 -nb_flow 1 -gumble_T .5  -weight_decay 1e-6 -learning_rate 1e-3 -hot_encoding
 sleep 10

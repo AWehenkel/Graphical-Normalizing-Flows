@@ -1,55 +1,68 @@
-power:
+power-mono-DAG:
+  dataset: 'power'
+  nb_flow: 1
   b_size: 2500
-  nb_steps_dual: 20
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [60, 60, 60, 30]
+  nb_steps_dual: 30
   l1: 0.
-  nb_epoch: 2500
-  nb_flow:
-    - 1
-    - 5
-  weight_decay: 1e-5
-  learning_rate: 1e-3
-  Normalizers:
-    - type:
-        Class:
-          Name: AffineNormalizer
-          args:
-      h_dim: 2
-    - type:
-        Class:
-          Name: MonotonicNormalizer
-          args:
-            nb_steps: 15
-            solver: "CC"
-            integrand_net:
-              Class:
-                Name: IntegrandNet
-                args:
-                  hidden: [100, 100, 100]
-                  cond_in: 30
-      h_dim: 30
-  Conditioners:
-      - type:
-        Class:
-          Name: CouplingConditioner
-          args:
-            in_size: VAR_dim
-            hidden: [60, 60, 60]
-            out_size: VAR_h_dim
-      - type:
-        Class:
-          Name: AutoregressiveConditioner
-          args:
-            args:
-              in_size: VAR_dim
-              hidden: [60, 60, 60]
-              out_size: VAR_h_dim
-      - type:
-          Class:
-            Name: DAGConditioner
-            args:
-              in_size: VAR_dim
-              soft_thresholding: True
-              h_thresh: 0.
-              hidden: [60, 60, 60]
-              out_size: VAR_h_dim
-              gumble_T: .5
+  gumble_T: .5
+  normalizer: 'monotonic'
+  int_net: [100, 100, 100]
+  nb_steps: 20
+  solver: 'CC'
+
+power-affine-DAG:
+  dataset: 'power'
+  nb_flow: 1
+  b_size: 2500
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [60, 60, 60, 2]
+  nb_steps_dual: 30
+  l1: 0.
+  gumble_T: .5
+  normalizer: 'affine'
+
+power-mono-coupling:
+  dataset: 'power'
+  nb_flow: 1
+  b_size: 2500
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [60, 60, 60, 30]
+  normalizer: 'monotonic'
+  int_net: [100, 100, 100]
+  nb_steps: 20
+  solver: 'CC'
+
+power-affine-coupling:
+  dataset: 'Coupling'
+  nb_flow: 1
+  b_size: 2500
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [60, 60, 60, 2]
+  normalizer: 'affine'
+
+power-mono-autoregressive:
+  dataset: 'power'
+  nb_flow: 1
+  b_size: 2500
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [60, 60, 60, 30]
+  normalizer: 'monotonic'
+  int_net: [100, 100, 100]
+  nb_steps: 20
+  solver: 'CC'
+
+power-affine-autoregressive:
+  dataset: 'power'
+  nb_flow: 1
+  b_size: 2500
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [60, 60, 60, 2]
+  normalizer: 'affine'

@@ -22,7 +22,7 @@ class DAGMLP(nn.Module):
 
 class DAGConditioner(Conditioner):
     def __init__(self, in_size, hidden, out_size, cond_in=0, soft_thresholding=True, h_thresh=0., gumble_T=1.,
-                 hot_encoding=False, l1_weight=0., nb_epoch_update=1):
+                 hot_encoding=False, l1=0., nb_epoch_update=1):
         super(DAGConditioner, self).__init__()
         self.A = nn.Parameter(torch.ones(in_size, in_size) * 1.5 + torch.randn((in_size, in_size)) * .02)
         self.in_size = in_size
@@ -47,7 +47,7 @@ class DAGConditioner(Conditioner):
         self.register_buffer("eta", torch.tensor(10.))
         self.register_buffer("gamma", torch.tensor(.9))
         self.register_buffer("lambd", torch.tensor(.0))
-        self.register_buffer("l1_weight", torch.tensor(l1_weight))
+        self.register_buffer("l1_weight", torch.tensor(l1))
         self.register_buffer("dag_const", torch.tensor(1.))
         self.d = in_size
         self.tol = 1e-20
@@ -189,10 +189,11 @@ class DAGConditioner(Conditioner):
         return loss
 
     def step(self, epoch_number, loss_avg=0.):
-        if epoch_number % self.nb_epoch_update == 0:
-            if self.in_size < 30:
-                print(self.soft_thresholded_A())
+        with torch.no_grad():
+            if epoch_number % self.nb_epoch_update == 0:
+                if self.in_size < 30:
+                    print(self.soft_thresholded_A())
 
-            if self.loss().abs() < loss_avg.abs()/10:
-                print("Update param")
-                self.update_dual_param()
+                if self.loss().abs() < loss_avg.abs()/10:
+                    print("Update param")
+                    self.update_dual_param()

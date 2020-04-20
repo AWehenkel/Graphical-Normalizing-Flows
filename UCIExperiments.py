@@ -1,14 +1,17 @@
-from models import DAGNF, MLP, MNISTCNN, DAGStep
-import torch
 from timeit import default_timer as timer
 import lib.utils as utils
+from datetime import datetime
+import yaml
 import os
 import matplotlib
 import matplotlib.pyplot as plt
 import networkx as nx
 import UCIdatasets
 import numpy as np
-from UMNN import UMNNMAFFlow
+from models.Normalizers import *
+from models.Conditionners import *
+from models.NormalizingFlowFactories import buildFCNormalizingFlow
+from models.NormalizingFlow import *
 import math
 
 def batch_iter(X, batch_size, shuffle=False):
@@ -50,10 +53,13 @@ def load_data(name):
         raise ValueError('Unknown dataset')
 
 
+cond_types = {"DAG": DAGConditioner, "Coupling": CouplingConditioner, "Autoregressive": AutoregressiveConditioner}
+norm_types = {"affine": AffineNormalizer, "monotonic": MonotonicNormalizer}
+
+
 def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000,
-          int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, umnn_maf=False, min_pre_heating_epochs=30,
-          all_args=None, file_number=None, train=True, solver="CC", nb_flow=1, linear_net=False, gumble_T=1.,
-          weight_decay=1e-5, learning_rate=1e-3, predefined_graph=False, hot_encoding=False):
+          int_net=[200, 200, 200], emb_net=[200, 200, 200], b_size=100, all_args=None, file_number=None, train=True,
+          solver="CC", nb_flow=1, weight_decay=1e-5, learning_rate=1e-3, cond_type='DAG', norm_type='affine'):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -75,90 +81,59 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     logger.info("Data loaded.")
 
     dim = data.trn.x.shape[1]
-    if umnn_maf:
-        model = UMNNMAFFlow(nb_flow=nb_flow, nb_in=dim, hidden_derivative=int_net, hidden_embedding=emb_net[:-1],
-                            embedding_s=emb_net[-1], nb_steps=nb_steps, device=device).to(device)
+    conditioner_type = cond_types[cond_type]
+    conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1], "gumble_T": .5,
+                        "hot_encoding": True, "nb_epoch_update": nb_step_dual}
+    if conditioner_type is DAGConditioner:
+        conditioner_args['l1'] = l1
+    normalizer_type = norm_types[norm_type]
+    if conditioner_type is MonotonicNormalizer:
+        normalizer_args = {"integrand_net": int_net, "cond_size": emb_net[-1], "nb_steps": nb_steps,
+                           "solver": solver}
     else:
-        emb_nets = []
-        for i in range(nb_flow):
-            if emb_net is not None:
-                if dataset == "mnist":
-                    net = MNISTCNN()
-                else:
-                    if hot_encoding:
-                        net = MLP(dim * 2, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
-                    else:
-                        net = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
-            else:
-                net = None
-            emb_nets.append(net)
-        l1_weight = l1
-        model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_nets=emb_nets, device=device,
-                      l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net, gumble_T=gumble_T,
-                      hot_encoding=hot_encoding)
-        #if nb_flow == 1:
-        #    model = DAGStep(in_d=dim, hidden_integrand=int_net, emb_d=emb_nets[0].out_d, emb_net=emb_nets[0],
-        #                    device=device, l1_weight=l1, nb_steps=nb_steps, solver=solver, linear_normalizer=linear_net,
-        #                    gumble_T=gumble_T)
-        #    model.nets = [model]
-    if min_pre_heating_epochs > 0:
-        model.dag_const = 0.
+        normalizer_args = {}
+
+    model = buildFCNormalizingFlow(nb_flow, conditioner_type, conditioner_args, normalizer_type, normalizer_args)
+    best_valid_loss = np.inf
+
     opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     # opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
-    if not umnn_maf and train:
-        for net in model.nets:
-            net.getDag().stoch_gate = True
-            net.getDag().noise_gate = False
-            with torch.no_grad():
-                if predefined_graph:
-                    print("coucou")
-                    net.getDag().stoch_gate = False
-                    net.getDag().s_thresh = False
-                    net.getDag().h_thresh = 0.
-                    net.getDag().post_process(1e-3)
-                    net.dag_embedding.get_dag().A.data = torch.tensor(data.A).float().to(device)
-                    net.dag_const = 0.
-                    net.getDag().gumble = False
+    if conditioner_type is DAGConditioner and train:
+        for conditioner in model.getConditioners():
+            conditioner.stoch_gate = True
+            conditioner.noise_gate = False
 
     if load:
         logger.info("Loading model...")
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
         model.train()
         opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
-        if not train and not umnn_maf:
+        if not train and conditioner_type is DAGConditioner:
             for net in model.nets:
                 net.dag_embedding.get_dag().stoch_gate = False
                 net.dag_embedding.get_dag().noise_gate = False
                 net.dag_embedding.get_dag().s_thresh = False
-                if predefined_graph:
-                    net.dag_embedding.get_dag().A = torch.tensor(data.A)
 
     for epoch in range(nb_epoch):
         ll_tot = 0
         start = timer()
 
         # Update constraints
-        if epoch % 1 == 0 and not umnn_maf:
+        if conditioner_type is DAGConditioner:
             with torch.no_grad():
-                model.constrainA(zero_threshold=0.)
-
-        if epoch % nb_step_dual == 0 and epoch != 0 and not umnn_maf and epoch > min_pre_heating_epochs:
-            model.update_dual_param()
-
-        if not umnn_maf:
-            for net in model.nets:
-                dagness = net.DAGness()
-                if dagness > 1e-10 and dagness < 1. and epoch > min_pre_heating_epochs:
-                    #net.l1_weight = .1
-                    #net.dag_const = 1.
-                    logger.info("Dagness constraint set on.")
+                for conditioner in model.getConditioners():
+                    conditioner.constrainA(zero_threshold=0.)
 
         i = 0
         # Training loop
+        model.to(device)
         if train:
             for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
-                model.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
-                loss = model.loss(cur_x).mean() if not umnn_maf else -model.compute_ll(cur_x)[0].mean()
+                if normalizer_type is MonotonicNormalizer:
+                    for normalizer in model.getNormalizers():
+                        normalizer.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
+                z, jac = model(cur_x)
+                loss = model.loss(z, jac)
                 if math.isnan(loss.item()):
                     print(model.compute_ll(cur_x))
                     exit()
@@ -169,108 +144,80 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 opt.step()
 
             ll_tot /= i
+            model.step(ll_tot, epoch)
         else:
             ll_tot = 0.
+
 
         # Valid loop
         ll_test = 0.
         i = 0.
         with torch.no_grad():
-            model.set_steps_nb(nb_steps + 20)
+            if normalizer_type is MonotonicNormalizer:
+                for normalizer in model.getNormalizers():
+                    normalizer.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
             for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
-                ll, _ = model.compute_ll(cur_x)
+                z, jac = model(cur_x)
+                ll = (model.z_log_density(z) + jac)
                 ll_test += ll.mean().item()
                 i += 1
         ll_test /= i
 
         end = timer()
-        if umnn_maf:
-            logger.info(
-                "epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - Elapsed time per epoch {:4f} (seconds)".
-                format(epoch, ll_tot, ll_test, end - start))
-        else:
-            dagness = max(model.DAGness())
-            logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
-                        format(epoch, ll_tot, ll_test, dagness, end-start))
+        dagness = max(model.DAGness())
+        logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
+                    format(epoch, ll_tot, ll_test, dagness, end-start))
 
-        if epoch % 10 == 0 and not umnn_maf:
+        if epoch % 10 == 0 and conditioner_type is DAGConditioner:
             stoch_gate, noise_gate, s_thresh = [], [], []
 
-            for net in model.nets:
-                stoch_gate.append(net.getDag().stoch_gate)
-                noise_gate.append(net.getDag().noise_gate)
-                s_thresh.append(net.getDag().s_thresh)
-                net.getDag().stoch_gate = False
-                net.getDag().noise_gate = False
-                net.getDag().s_thresh = True
+            for conditioner in model.getConditioners():
+                stoch_gate.append(conditioner.stoch_gate)
+                noise_gate.append(conditioner.noise_gate)
+                s_thresh.append(conditioner.s_thresh)
+                conditioner.stoch_gate = False
+                conditioner.noise_gate = False
+                conditioner.s_thresh = True
             for threshold in [.95, .5, .1, .01, .0001]:
-                model.set_h_threshold(threshold)
+                for conditioner in model.getConditioners():
+                    conditioner.h_thresh = threshold
                 # Valid loop
                 ll_test = 0.
                 i = 0.
                 for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
-                    ll, _ = model.compute_ll(cur_x)
+                    z, jac = model(cur_x)
+                    ll = (model.z_log_density(z) + jac)
                     ll_test += ll.mean().item()
                     i += 1
                 ll_test /= i
                 dagness = max(model.DAGness())
                 logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
                             format(epoch, threshold, ll_test, dagness))
+            if dagness < 1e-5 and -ll_test < best_valid_loss:
+                logger.info("New best validation loss with threshold %f" % threshold)
+                # Valid loop
+                ll_test = 0.
+                i = 0.
+                for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
+                    z, jac = model(cur_x)
+                    ll = (model.z_log_density(z) + jac)
+                    ll_test += ll.mean().item()
+                    i += 1
+                ll_test /= i
+
+
             i = 0
-            model.set_h_threshold(0.)
-            for net in model.nets:
-                net.getDag().stoch_gate = stoch_gate[i]
-                net.getDag().noise_gate = noise_gate[i]
-                net.getDag().s_thresh = s_thresh[i]
+            for conditioner in model.getConditioners():
+                conditioner.h_thresh = threshold
+                conditioner.stoch_gate = stoch_gate[i]
+                conditioner.noise_gate = noise_gate[i]
+                conditioner.s_thresh = s_thresh[i]
                 i += 1
-
-        if epoch % nb_step_dual == 0:
-
-            if not umnn_maf:
-                # Plot DAG
-                font = {'family': 'normal',
-                        'weight': 'bold',
-                        'size': 12}
-
-                matplotlib.rc('font', **font)
-                A_normal = model.nets[0].dag_embedding.get_dag().soft_thresholded_A().detach().cpu().numpy().T
-                logger.info(str(A_normal))
-                A_thresholded = A_normal * (A_normal > .001)
-                j = 0
-                for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
-                    #A /= A.sum() / np.log(dim)
-                    ax = plt.subplot(2, 2, 1 + j)
-                    plt.title(name + " DAG")
-                    G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-                    pos = nx.layout.spring_layout(G)
-                    nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
-                    edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-                    nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
-                                           arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                           edge_cmap=plt.cm.Blues, width=5 * weights)
-                    labels = {}
-                    for i in range(dim):
-                        labels[i] = str(r'$%d$' % i)
-                    nx.draw_networkx_labels(G, pos, labels, font_size=12)
-
-                    ax = plt.subplot(2, 2, 2 + j)
-                    out = ax.matshow(np.log(A))
-                    plt.colorbar(out, ax=ax)
-                    j += 2
-                    # vf.plt_flow(model.compute_ll, ax)
-
-                plt.savefig("%s/DAG_%d.pdf" % (path, epoch))
-                G.clear()
-                plt.clf()
-
-                if dataset == "proteins":
-                    logger.info("SHD: %s" % str(UCIdatasets.get_shd(A > 1e-3)))
-                    logger.info("Nb edges: %d" % (A > 1e-3).reshape(-1).sum().item())
 
             torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
             torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % epoch)
-            if dataset == "proteins" and not umnn_maf:
-                torch.save(model.nets[0].dag_embedding.get_dag().soft_thresholded_A().detach().cpu(), path + '/A_%d.pt' % epoch)
+            if dataset == "proteins" and conditioner_type is DAGConditioner:
+                torch.save(model.getConditioners[0].soft_thresholded_A().detach().cpu(), path + '/A_%d.pt' % epoch)
 
         torch.save(model.state_dict(), path + '/model.pt')
         torch.save(opt.state_dict(), path + '/ADAM.pt')
@@ -279,48 +226,55 @@ import argparse
 datasets = ["power", "gas", "bsds300", "miniboone", "hepmass", "digits", "proteins"]
 
 parser = argparse.ArgumentParser(description='')
+parser.add_argument("-load_config", default=None, type=str)
+# General Parameters
 parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy problem ?")
 parser.add_argument("-load", default=False, action="store_true", help="Load a model ?")
 parser.add_argument("-folder", default="", help="Folder")
-parser.add_argument("-nb_steps_dual", default=100, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
-parser.add_argument("-l1", default=.2, type=float, help="Maximum weight for l1 regularization")
-parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
-parser.add_argument("-b_size", default=100, type=int, help="Batch size")
-parser.add_argument("-int_net", default=[100, 100, 100, 100], nargs="+", type=int, help="NN hidden layers of UMNN")
-parser.add_argument("-emb_net", default=[100, 100, 100, 10], nargs="+", type=int, help="NN layers of embedding")
-parser.add_argument("-UMNN_MAF", default=False, action="store_true", help="replace the DAG-NF by a UMNN-MAF")
-parser.add_argument("-nb_steps", default=20, type=int, help="Number of integration steps.")
-parser.add_argument("-min_pre_heating_epochs", default=30, type=int, help="Number of heating steps.")
 parser.add_argument("-f_number", default=None, type=str, help="Number of heating steps.")
-parser.add_argument("-solver", default="CC", type=str, help="Which integral solver to use.",
-                    choices=["CC", "CCParallel"])
-parser.add_argument("-nb_flow", type=int, default=1, help="Number of steps in the flow.")
 parser.add_argument("-test", default=False, action="store_true")
-parser.add_argument("-linear_net", default=False, action="store_true")
-parser.add_argument("-gumble_T", default=1., type=float, help="Temperature of the gumble distribution.")
+parser.add_argument("-nb_flow", type=int, default=1, help="Number of steps in the flow.")
+
+# Optim Parameters
 parser.add_argument("-weight_decay", default=1e-5, type=float, help="Weight decay value")
 parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight decay value")
-parser.add_argument("-predefined_graph", default=False, action="store_true")
-parser.add_argument("-hot_encoding", default=False, action="store_true")
+parser.add_argument("-nb_epoch", default=10000, type=int, help="Number of epochs")
+parser.add_argument("-b_size", default=100, type=int, help="Batch size")
 
+# Conditioner Parameters
+parser.add_argument("-conditioner", default='DAG', choices=['DAG', 'Coupling', 'Autoregressive'], type=str)
+parser.add_argument("-emb_net", default=[100, 100, 100, 10], nargs="+", type=int, help="NN layers of embedding")
+    # Specific for DAG:
+parser.add_argument("-nb_steps_dual", default=100, type=int, help="number of step between updating Acyclicity constraint and sparsity constraint")
+parser.add_argument("-l1", default=.2, type=float, help="Maximum weight for l1 regularization")
+parser.add_argument("-gumble_T", default=1., type=float, help="Temperature of the gumble distribution.")
 
+# Normalizer Parameters
+parser.add_argument("-normalizer", default='affine', choices=['affine', 'monotonic'], type=str)
+parser.add_argument("-int_net", default=[100, 100, 100, 100], nargs="+", type=int, help="NN hidden layers of UMNN")
+parser.add_argument("-nb_steps", default=20, type=int, help="Number of integration steps.")
+parser.add_argument("-solver", default="CC", type=str, help="Which integral solver to use.",
+                    choices=["CC", "CCParallel"])
 
 args = parser.parse_args()
-from datetime import datetime
+
 now = datetime.now()
 
-if args.dataset is None:
-    toys = datasets
-else:
-    toys = [args.dataset]
+if args.load_config is not None:
+    with open("UCIExperimentsConfigurations.yml", 'r') as stream:
+        try:
+            configs = yaml.safe_load(stream)[args.load_config]
+            for key, val in configs.items():
+                setattr(args, key, val)
+        except yaml.YAMLError as exc:
+            print(exc)
 
-for toy in toys:
-    path = toy + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
-    if not(os.path.isdir(path)):
-        os.makedirs(path)
-    train(toy, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
-          int_net=args.int_net, emb_net=args.emb_net, b_size=args.b_size, all_args=args, umnn_maf=args.UMNN_MAF,
-          nb_steps=args.nb_steps, min_pre_heating_epochs=args.min_pre_heating_epochs, file_number=args.f_number,
-          solver=args.solver, nb_flow=args.nb_flow, train=not args.test, linear_net=args.linear_net,
-          gumble_T=args.gumble_T, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
-          predefined_graph=args.predefined_graph, hot_encoding=args.hot_encoding)
+dir_name = args.dataset if args.load_config is None else args.load_config
+path = "UCIExperiments/" + dir_name + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
+if not(os.path.isdir(path)):
+    os.makedirs(path)
+train(args.dataset, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
+      int_net=args.int_net, emb_net=args.emb_net, b_size=args.b_size, all_args=args,
+      nb_steps=args.nb_steps, file_number=args.f_number,  solver=args.solver, nb_flow=args.nb_flow,
+      train=not args.test, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
+      cond_type=args.conditioner,  norm_type=args.normalizer)

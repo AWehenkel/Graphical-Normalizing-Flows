@@ -165,6 +165,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         i = 0
         # Training loop
         if train:
+            model.to(master_device)
             for batch_idx, (cur_x, target) in enumerate(train_loader):
                 cur_x = cur_x.view(-1, dim).float().to(master_device)
                 for normalizer in model.module.getNormalizers():
@@ -176,7 +177,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                     print("Error Nan in loss")
                     print("Dagness:", model.module.DAGness())
                     exit()
-                ll_tot += loss.item()
+                ll_tot += loss.detach()
                 i += 1
                 if batch_idx % batch_per_optim_step == 0:
                     opt.zero_grad()
@@ -189,7 +190,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                 print("Dagness:", model.module.DAGness())
 
             ll_tot /= i
-            model.step(epoch, ll_tot)
+            model.module.step(epoch, ll_tot)
 
         else:
             ll_tot = 0.
@@ -199,13 +200,15 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         ll_test = 0.
         bpp_test = 0.
         i = 0.
+        model.to(master_device)
         with torch.no_grad():
             for normalizer in model.module.getNormalizers():
                 if type(normalizer) is MonotonicNormalizer:
                     normalizer.nb_steps = 30
             for batch_idx, (cur_x, target) in enumerate(valid_loader):
                 cur_x = cur_x.view(-1, dim).float().to(master_device)
-                ll, _ = model(cur_x, only_ll=True)
+                z, jac = model(cur_x)
+                ll = (model.module.z_log_density(z) + jac)
                 ll_test += ll.mean().item()
                 bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
                 i += 1
@@ -215,7 +218,7 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
         if umnn_maf:
             logger.info(
                 "epoch: {:d} - Train loss: {:4f} - Valid loss: {:4f} - Valid BPP {:4f} - Elapsed time per epoch {:4f} "
-                "(seconds)".format(epoch, ll_tot, ll_test, bpp_test, end - start))
+                "(seconds)".format(epoch, ll_tot.item(), ll_test, bpp_test, end - start))
         else:
             dagness = max(model.module.DAGness())
             logger.info(
@@ -233,7 +236,8 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                     conditioner.noise_gate = False
                     conditioner.s_thresh = True
                 for threshold in [.95, .5, .1, .01, .0001]:
-                    conditioner.set_h_threshold = threshold
+                    for conditioner in model.getConditioners():
+                        conditioner.h_thresh = threshold
                     # Valid loop
                     ll_test = 0.
                     bpp_test = 0.
@@ -241,7 +245,8 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                     for batch_idx, (cur_x, target) in enumerate(valid_loader):
                         cur_x = cur_x.view(-1, dim).float().to(device)
                         z, jac = model(cur_x)
-                        ll_test += (model.module.z_log_density(z) + jac).mean().item()
+                        ll = (model.module.z_log_density(z) + jac)
+                        ll_test += ll.mean().item()
                         bpp_test += compute_bpp(ll, cur_x.view(-1, dim).float().to(device)).mean().item()
                         i += 1
                     ll_test /= i
@@ -250,8 +255,8 @@ def train(load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=100
                     logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f}".
                         format(epoch, threshold, ll_test, bpp_test, dagness))
                 i = 0
-                model.module.set_h_threshold(0.)
                 for conditioner in model.module.getConditioners():
+                    conditioner.h_thresh = 0.
                     conditioner.stoch_gate = stoch_gate[i]
                     conditioner.noise_gate = noise_gate[i]
                     conditioner.s_thresh = s_thresh[i]
