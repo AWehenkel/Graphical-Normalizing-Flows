@@ -55,10 +55,10 @@ class MonotonicNormalizer(Normalizer):
         h = h.permute(0, 2, 1).contiguous().view(x.shape[0], -1)
 
         if self.solver == "CC":
-            z = NeuralIntegral.apply(x0, x, self.integrand_net, _flatten(self.integrand_net.parameters()),
+            z = NeuralIntegral.apply(x0, xT, self.integrand_net, _flatten(self.integrand_net.parameters()),
                                      h, self.nb_steps) + z0
         elif self.solver == "CCParallel":
-            z = ParallelNeuralIntegral.apply(x0, x, self.integrand_net,
+            z = ParallelNeuralIntegral.apply(x0, xT, self.integrand_net,
                                              _flatten(self.integrand_net.parameters()),
                                              h, self.nb_steps) + z0
         else:

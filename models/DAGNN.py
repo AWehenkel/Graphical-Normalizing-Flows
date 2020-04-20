@@ -300,7 +300,7 @@ class DAGStep(nn.Module):
         self.register_buffer("gamma", torch.tensor(.9))
         self.register_buffer("lambd", torch.tensor(.0))
         self.register_buffer("l1_weight", torch.tensor(l1_weight))
-
+        self.register_buffer("dag_const", torch.tensor(1.))
         self.d = in_d
         self.prev_trace = self.dag_embedding.get_dag().get_power_trace(self.c / self.d)
         self.tol = 1e-20

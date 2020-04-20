@@ -31,7 +31,10 @@ class DAGConditioner(Conditioner):
         self.stoch_gate = True
         self.noise_gate = False
         in_net = in_size*2 if hot_encoding else in_size
-        self.embedding_net = DAGMLP(in_net, hidden, out_size, cond_in)
+        if issubclass(type(hidden), nn.Module):
+            self.embedding_net = hidden
+        else:
+            self.embedding_net = DAGMLP(in_net, hidden, out_size, cond_in)
         self.gumble = True
         self.hutchinson = False
         self.gumble_T = gumble_T
@@ -45,14 +48,13 @@ class DAGConditioner(Conditioner):
         self.register_buffer("gamma", torch.tensor(.9))
         self.register_buffer("lambd", torch.tensor(.0))
         self.register_buffer("l1_weight", torch.tensor(l1_weight))
+        self.register_buffer("dag_const", torch.tensor(1.))
         self.d = in_size
         self.tol = 1e-20
-        _, S, _ = torch.svd(self.dag_embedding.get_dag().A)
+        _, S, _ = torch.svd(self.A)
         sigma_max = S.max().item()
         self.register_buffer("alpha", torch.tensor(1. / sigma_max ** 2))
-        self.alpha = (self.c / self.d)
         self.register_buffer("prev_trace", self.get_power_trace())
-        self.alpha = 1. / sigma_max ** 2
 
         self.nb_epoch_update = nb_epoch_update
 
@@ -168,7 +170,7 @@ class DAGConditioner(Conditioner):
         with torch.no_grad():
             _, S, _ = torch.svd(self.A)
             sigma_max = S.max().item()
-            self.alpha = 1./sigma_max**2
+            self.alpha = torch.tensor(1. / sigma_max ** 2)
             lag_const = self.get_power_trace()
             if self.dag_const > 0. and lag_const > self.tol:
                 self.lambd = self.lambd + self.c * lag_const
@@ -183,15 +185,14 @@ class DAGConditioner(Conditioner):
 
     def loss(self):
         lag_const = self.get_power_trace()
-        print(lag_const)
         loss = self.dag_const*(self.lambd*lag_const + self.c/2*lag_const**2) + self.l1_weight*self.A.abs().mean()
         return loss
 
     def step(self, epoch_number, loss_avg=0.):
         if epoch_number % self.nb_epoch_update == 0:
-            print(self.soft_thresholded_A())
-            _, S, _ = torch.svd(self.A)
-            sigma_max = S.max().item()
-            self.alpha = 1. / sigma_max ** 2
+            if self.in_size < 30:
+                print(self.soft_thresholded_A())
+
             if self.loss().abs() < loss_avg.abs()/10:
+                print("Update param")
                 self.update_dual_param()

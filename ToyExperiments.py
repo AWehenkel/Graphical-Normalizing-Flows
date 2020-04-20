@@ -37,19 +37,19 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
             step = None
         emb_nets.append(step)
 
-    model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=emb_nets[0].out_d, emb_nets=emb_nets, device=device,
+    model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=emb_nets[0].out_d, emb_nets=emb_nets,
                   l1_weight=l1, nb_steps=nb_steps, linear_normalizer=linear_net)
     model.dag_const = 0.
 
     conditioner_type = DAGConditioner
-    conditioner_args = {"in_size": dim, "hidden": [200, 200, 200, 200], "out_size": 2, "gumble_T": 1., "hot_encoding": True,
+    conditioner_args = {"in_size": dim, "hidden": [200, 200, 200, 200], "out_size": 10, "gumble_T": 1., "hot_encoding": True,
                         "nb_epoch_update": nb_step_dual}
     #conditioner_type = CouplingConditioner
     #conditioner_args = {"in_size": dim, "hidden": [50, 50, 50], "out_size": 2}
-    #normalizer_type = MonotonicNormalizer
-    #normalizer_args = {"integrand_net": [50, 50, 50], "cond_size": 10, "nb_steps": 10, "solver": "CCParallel"}
-    normalizer_type = AffineNormalizer
-    normalizer_args = {}
+    normalizer_type = MonotonicNormalizer
+    normalizer_args = {"integrand_net": [50, 50, 50], "cond_size": 10, "nb_steps": 10, "solver": "CCParallel"}
+    #normalizer_type = AffineNormalizer
+    #normalizer_args = {}
     model = buildFCNormalizingFlow(1, conditioner_type, conditioner_args, normalizer_type, normalizer_args)
     print(model)
     #exit()
@@ -74,8 +74,8 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         start = timer()
         for j in range(0, nb_samp, batch_size):
             cur_x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=batch_size)).to(device)
-            z, log_p_x = model(cur_x)
-            loss = model.loss(z, log_p_x)
+            z, jac = model(cur_x)
+            loss = model.loss(z, jac)
             loss_tot += loss.detach()
             if math.isnan(loss.item()):
                 ll, z = model.compute_ll(cur_x)
