@@ -277,8 +277,8 @@ if args.load_config is not None:
                 setattr(args, key, val)
         except yaml.YAMLError as exc:
             print(exc)
-print(type(configs['weight_decay']))
-exit()
+
+
 dir_name = args.dataset if args.load_config is None else args.load_config
 path = "UCIExperiments/" + dir_name + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
 if not(os.path.isdir(path)):
