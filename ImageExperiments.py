@@ -303,7 +303,7 @@ now = datetime.now()
 path = args.dataset + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
 if not (os.path.isdir(path)):
     os.makedirs(path)
-train(load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
+train(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
       int_net=args.int_net, b_size=args.b_size, all_args=args,
       nb_steps=args.nb_steps, file_number=args.f_number, norm_type=args.normalizer,
       solver=args.solver, train=not args.test, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
