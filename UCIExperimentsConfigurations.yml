@@ -38,11 +38,11 @@ power-mono-coupling:
   solver: 'CC'
 
 power-affine-coupling:
-  dataset: 'Coupling'
+  dataset: 'power'
   nb_flow: 1
   b_size: 2500
   nb_epoch: 10000
-  conditioner: 'DAG'
+  conditioner: 'Coupling'
   emb_net: [60, 60, 60, 2]
   normalizer: 'affine'
 
@@ -51,7 +51,7 @@ power-mono-autoregressive:
   nb_flow: 1
   b_size: 2500
   nb_epoch: 10000
-  conditioner: 'DAG'
+  conditioner: 'Autoregressive'
   emb_net: [60, 60, 60, 30]
   normalizer: 'monotonic'
   int_net: [100, 100, 100]
@@ -63,6 +63,6 @@ power-affine-autoregressive:
   nb_flow: 1
   b_size: 2500
   nb_epoch: 10000
-  conditioner: 'DAG'
+  conditioner: 'Autoregressive'
   emb_net: [60, 60, 60, 2]
   normalizer: 'affine'

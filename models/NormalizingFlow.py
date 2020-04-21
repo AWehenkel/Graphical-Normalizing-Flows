@@ -65,7 +65,7 @@ class NormalizingFlowStep(NormalizingFlow):
     def DAGness(self):
         if type(self.conditioner) is DAGConditioner:
             return [self.conditioner.get_power_trace()]
-        return 0.
+        return [0.]
 
     def step(self, epoch_number, loss_avg):
         if type(self.conditioner) is DAGConditioner:

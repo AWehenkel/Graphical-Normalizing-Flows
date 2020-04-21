@@ -4,31 +4,25 @@ import torch.nn.functional as F
 
 
 class MLP(nn.Module):
-    def __init__(self, in_d, hidden, out_d, act_f=nn.ReLU(), device="cpu"):
+    def __init__(self, in_d, hidden, out_d, act_f=nn.ReLU()):
         super().__init__()
         self.in_d = in_d
         self.hiddens = hidden
         self.out_d = out_d
         self.act_f = act_f
-        self.device = device
         layers_dim = [in_d] + hidden + [out_d]
         layers = []
         for dim_in, dim_out in zip(layers_dim[:-1], layers_dim[1:]):
             layers += [nn.Linear(dim_in, dim_out), act_f]
         layers.pop()
-        self.net = nn.Sequential(*layers).to(device)
+        self.net = nn.Sequential(*layers)
 
     def forward(self, x, context=None):
         return self.net(x)
 
-    def to(self, device):
-        self.net.to(device)
-        self.device = device
-        return self
-
 
 class MNISTCNN(nn.Module):
-    def __init__(self, out_d=10, device="cpu", fc_l=[2304, 128], size_img=[1, 28, 28]):
+    def __init__(self, out_d=10, fc_l=[2304, 128], size_img=[1, 28, 28]):
         super(MNISTCNN, self).__init__()
         self.conv1 = nn.Conv2d(size_img[0], 16, 3, 1)
         self.conv2 = nn.Conv2d(16, 16, 3, 1)
@@ -37,7 +31,6 @@ class MNISTCNN(nn.Module):
         self.fc1 = nn.Linear(fc_l[0], fc_l[1])
         self.fc2 = nn.Linear(fc_l[1], out_d)
         self.out_d = out_d
-        self.device = device
         self.size_img = size_img
 
     def forward(self, x, context=None):
@@ -55,7 +48,7 @@ class MNISTCNN(nn.Module):
         return x
 
 class CIFAR10CNN(nn.Module):
-    def __init__(self, out_d=10, device="cpu", fc_l=[400, 128, 84], size_img=[3, 32, 32], k_size=5):
+    def __init__(self, out_d=10, fc_l=[400, 128, 84], size_img=[3, 32, 32], k_size=5):
         super(CIFAR10CNN, self).__init__()
         self.conv1 = nn.Conv2d(size_img[0], 6, k_size)
         self.pool = nn.MaxPool2d(2, 2)
@@ -65,7 +58,6 @@ class CIFAR10CNN(nn.Module):
         self.fc3 = nn.Linear(fc_l[2], out_d)
 
         self.out_d = out_d
-        self.device = device
         self.size_img = size_img
 
     def forward(self, x, context=None):

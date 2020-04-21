@@ -82,12 +82,14 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
     dim = data.trn.x.shape[1]
     conditioner_type = cond_types[cond_type]
-    conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1], "gumble_T": .5,
-                        "hot_encoding": True, "nb_epoch_update": nb_step_dual}
+    conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1]}
     if conditioner_type is DAGConditioner:
         conditioner_args['l1'] = l1
+        conditioner_args['gumble_T'] = .5
+        conditioner_args['nb_epoch_update'] = nb_step_dual
+        conditioner_args["hot_encoding"] = True
     normalizer_type = norm_types[norm_type]
-    if conditioner_type is MonotonicNormalizer:
+    if normalizer_type is MonotonicNormalizer:
         normalizer_args = {"integrand_net": int_net, "cond_size": emb_net[-1], "nb_steps": nb_steps,
                            "solver": solver}
     else:
@@ -131,88 +133,84 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
                 if normalizer_type is MonotonicNormalizer:
                     for normalizer in model.getNormalizers():
-                        normalizer.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
+                        normalizer.nb_steps  = nb_steps + torch.randint(0, 10, [1])[0].item()
                 z, jac = model(cur_x)
                 loss = model.loss(z, jac)
                 if math.isnan(loss.item()):
-                    print(model.compute_ll(cur_x))
+                    print("Error NAN in loss")
                     exit()
-                ll_tot += loss.item()
+                ll_tot += loss.detach()
                 i += 1
                 opt.zero_grad()
                 loss.backward(retain_graph=True)
                 opt.step()
 
             ll_tot /= i
-            model.step(ll_tot, epoch)
+            model.step(epoch, ll_tot)
         else:
             ll_tot = 0.
 
 
         # Valid loop
         ll_test = 0.
-        i = 0.
         with torch.no_grad():
             if normalizer_type is MonotonicNormalizer:
                 for normalizer in model.getNormalizers():
-                    normalizer.set_steps_nb(nb_steps + torch.randint(0, 10, [1])[0].item())
-            for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
+                    normalizer.nb_steps = nb_steps + 20
+            for i, cur_x in enumerate(batch_iter(data.val.x, shuffle=True, batch_size=batch_size)):
                 z, jac = model(cur_x)
                 ll = (model.z_log_density(z) + jac)
                 ll_test += ll.mean().item()
-                i += 1
-        ll_test /= i
+            ll_test /= i
 
-        end = timer()
-        dagness = max(model.DAGness())
-        logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
-                    format(epoch, ll_tot, ll_test, dagness, end-start))
+            end = timer()
+            dagness = max(model.DAGness())
+            logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
+                        format(epoch, ll_tot.item(), ll_test, dagness, end-start))
 
-        if epoch % 10 == 0 and conditioner_type is DAGConditioner:
-            stoch_gate, noise_gate, s_thresh = [], [], []
+            if epoch % 10 == 0 and conditioner_type is DAGConditioner:
+                stoch_gate, noise_gate, s_thresh = [], [], []
 
-            for conditioner in model.getConditioners():
-                stoch_gate.append(conditioner.stoch_gate)
-                noise_gate.append(conditioner.noise_gate)
-                s_thresh.append(conditioner.s_thresh)
-                conditioner.stoch_gate = False
-                conditioner.noise_gate = False
-                conditioner.s_thresh = True
-            for threshold in [.95, .5, .1, .01, .0001]:
                 for conditioner in model.getConditioners():
+                    stoch_gate.append(conditioner.stoch_gate)
+                    noise_gate.append(conditioner.noise_gate)
+                    s_thresh.append(conditioner.s_thresh)
+                    conditioner.stoch_gate = False
+                    conditioner.noise_gate = False
+                    conditioner.s_thresh = True
+                for threshold in [.95, .5, .1, .01, .0001]:
+                    for conditioner in model.getConditioners():
+                        conditioner.h_thresh = threshold
+                    # Valid loop
+                    ll_test = 0.
+                    for i, cur_x in enumerate(batch_iter(data.val.x, shuffle=True, batch_size=batch_size)):
+                        z, jac = model(cur_x)
+                        ll = (model.z_log_density(z) + jac)
+                        ll_test += ll.mean().item()
+                    ll_test /= i
+                    dagness = max(model.DAGness())
+                    logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
+                                format(epoch, threshold, ll_test, dagness))
+                if dagness < 1e-5 and -ll_test < best_valid_loss:
+                    logger.info("------- New best validation loss with threshold %f --------" % threshold)
+                    torch.save(model.state_dict(), path + '/best_model.pt' % epoch)
+                    best_valid_loss = -ll_test
+                    # Valid loop
+                    ll_test = 0.
+                    for i, cur_x in enumerate(batch_iter(data.tst.x, shuffle=True, batch_size=batch_size)):
+                        z, jac = model(cur_x)
+                        ll = (model.z_log_density(z) + jac)
+                        ll_test += ll.mean().item()
+                    ll_test /= i
+
+                    logger.info("epoch: {:d} - Threshold: {:4f} - Test log-likelihood: {:4f} - <<DAGness>>: {:4f}".
+                                format(epoch, threshold, ll_test, dagness))
+
+                for i, conditioner in enumerate(model.getConditioners()):
                     conditioner.h_thresh = threshold
-                # Valid loop
-                ll_test = 0.
-                i = 0.
-                for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
-                    z, jac = model(cur_x)
-                    ll = (model.z_log_density(z) + jac)
-                    ll_test += ll.mean().item()
-                    i += 1
-                ll_test /= i
-                dagness = max(model.DAGness())
-                logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
-                            format(epoch, threshold, ll_test, dagness))
-            if dagness < 1e-5 and -ll_test < best_valid_loss:
-                logger.info("New best validation loss with threshold %f" % threshold)
-                # Valid loop
-                ll_test = 0.
-                i = 0.
-                for cur_x in batch_iter(data.val.x, shuffle=True, batch_size=batch_size):
-                    z, jac = model(cur_x)
-                    ll = (model.z_log_density(z) + jac)
-                    ll_test += ll.mean().item()
-                    i += 1
-                ll_test /= i
-
-
-            i = 0
-            for conditioner in model.getConditioners():
-                conditioner.h_thresh = threshold
-                conditioner.stoch_gate = stoch_gate[i]
-                conditioner.noise_gate = noise_gate[i]
-                conditioner.s_thresh = s_thresh[i]
-                i += 1
+                    conditioner.stoch_gate = stoch_gate[i]
+                    conditioner.noise_gate = noise_gate[i]
+                    conditioner.s_thresh = s_thresh[i]
 
             torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
             torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % epoch)

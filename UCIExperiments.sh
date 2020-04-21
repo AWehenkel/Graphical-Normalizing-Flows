@@ -7,7 +7,7 @@
 #SBATCH --output="DAG-NF-UCI-%j.out"
 
 args=("$@")
-supp_args=$(printf "%s "  "${args[@]:1}")
+supp_args=$(printf "%s "  "${args[@]}")
 
 source activate UMNN
-python UCIExperiments.py -dataset $1  $supp_args
+python UCIExperiments.py $supp_args
