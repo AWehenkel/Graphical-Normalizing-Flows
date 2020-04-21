@@ -289,7 +289,6 @@ parser.add_argument("-solver", default="CC", type=str, help="Which integral solv
                     choices=["CC", "CCParallel"])
 parser.add_argument("-nb_flow", type=int, default=1, help="Number of steps in the flow.")
 parser.add_argument("-test", default=False, action="store_true")
-parser.add_argument("-linear_net", default=False, action="store_true")
 parser.add_argument("-weight_decay", default=1e-5, type=float, help="Weight decay value")
 parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight decay value")
 parser.add_argument("-batch_per_optim_step", default=1, type=int, help="Number of batch to accumulate")

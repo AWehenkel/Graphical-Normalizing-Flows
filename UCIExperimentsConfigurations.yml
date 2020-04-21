@@ -66,3 +66,303 @@ power-affine-autoregressive:
   conditioner: 'Autoregressive'
   emb_net: [60, 60, 60, 2]
   normalizer: 'affine'
+
+gas-mono-DAG:
+  dataset: 'gas'
+  nb_flow: 1
+  b_size: 10000
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [80, 80, 80, 30]
+  nb_steps_dual: 100
+  l1: 0.
+  gumble_T: .5
+  normalizer: 'monotonic'
+  int_net: [200, 200, 200]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-3
+
+gas-affine-DAG:
+  dataset: 'gas'
+  nb_flow: 1
+  b_size: 10000
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [80, 80, 80, 30]
+  nb_steps_dual: 100
+  l1: 0.
+  gumble_T: .5
+  normalizer: 'affine'
+  weight_decay: 1e-3
+
+gas-mono-coupling:
+  dataset: 'gas'
+  nb_flow: 1
+  b_size: 10000
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [80, 80, 80, 30]
+  normalizer: 'monotonic'
+  int_net: [200, 200, 200]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-3
+
+gas-affine-coupling:
+  dataset: 'gas'
+  nb_flow: 1
+  b_size: 10000
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [80, 80, 80, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-3
+
+gas-mono-autoregressive:
+  dataset: 'gas'
+  nb_flow: 1
+  b_size: 10000
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [80, 80, 80, 30]
+  normalizer: 'monotonic'
+  int_net: [200, 200, 200]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-3
+
+gas-affine-autoregressive:
+  dataset: 'gas'
+  nb_flow: 1
+  b_size: 10000
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [80, 80, 80, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-3
+
+hepmass-mono-DAG:
+  dataset: 'hepmass'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [210, 210, 210, 30]
+  nb_steps_dual: 25
+  l1: 0.
+  gumble_T: .5
+  normalizer: 'monotonic'
+  int_net: [200, 200, 200]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-4
+
+hepmass-affine-DAG:
+  dataset: 'hepmass'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [210, 210, 210, 30]
+  nb_steps_dual: 25
+  l1: 0.
+  gumble_T: .5
+  normalizer: 'affine'
+  weight_decay: 1e-4
+
+hepmass-mono-coupling:
+  dataset: 'hepmass'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [210, 210, 210, 30]
+  normalizer: 'monotonic'
+  int_net: [200, 200, 200]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-4
+
+hepmass-affine-coupling:
+  dataset: 'hepmass'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [210, 210, 210, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-4
+
+hepmass-mono-autoregressive:
+  dataset: 'hepmass'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [210, 210, 210, 30]
+  normalizer: 'monotonic'
+  int_net: [200, 200, 200]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-4
+
+hepmass-affine-autoregressive:
+  dataset: 'hepmass'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [210, 210, 210, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-4
+
+miniboone-mono-DAG:
+  dataset: 'miniboone'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [430, 430, 430, 30]
+  nb_steps_dual: 200
+  l1: 0.
+  gumble_T: .5
+  normalizer: 'monotonic'
+  int_net: [40, 40, 40]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-2
+
+miniboone-affine-DAG:
+  dataset: 'miniboone'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [430, 430, 430, 30]
+  nb_steps_dual: 200
+  l1: 0.
+  gumble_T: .5
+  normalizer: 'affine'
+  weight_decay: 1e-2
+
+miniboone-mono-coupling:
+  dataset: 'miniboone'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [430, 430, 430, 30]
+  normalizer: 'monotonic'
+  int_net: [40, 40, 40]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-2
+
+miniboone-affine-coupling:
+  dataset: 'miniboone'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [430, 430, 430, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-2
+
+miniboone-mono-autoregressive:
+  dataset: 'miniboone'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [430, 430, 430, 30]
+  normalizer: 'monotonic'
+  int_net: [40, 40, 40]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-2
+
+miniboone-affine-autoregressive:
+  dataset: 'miniboone'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [430, 430, 430, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-2
+
+bsds300-mono-DAG:
+  dataset: 'bsds300'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [630, 630, 630, 30]
+  nb_steps_dual: 20
+  l1: 0.
+  gumble_T: .5
+  normalizer: 'monotonic'
+  int_net: [150, 150, 150]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-4
+
+bsds300-affine-DAG:
+  dataset: 'bsds300'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'DAG'
+  emb_net: [630, 630, 630, 30]
+  nb_steps_dual: 20
+  l1: 0.
+  gumble_T: .5
+  normalizer: 'affine'
+  weight_decay: 1e-4
+
+bsds300-mono-coupling:
+  dataset: 'bsds300'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [630, 630, 630, 30]
+  normalizer: 'monotonic'
+  int_net: [150, 150, 150]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-4
+
+bsds300-affine-coupling:
+  dataset: 'bsds300'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [630, 630, 630, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-4
+
+bsds300-mono-autoregressive:
+  dataset: 'bsds300'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [630, 630, 630, 30]
+  normalizer: 'monotonic'
+  int_net: [150, 150, 150]
+  nb_steps: 20
+  solver: 'CC'
+  weight_decay: 1e-4
+
+bsds300-affine-autoregressive:
+  dataset: 'bsds300'
+  nb_flow: 1
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [630, 630, 630, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-4
