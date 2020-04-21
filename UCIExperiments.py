@@ -13,6 +13,7 @@ from models.Conditionners import *
 from models.NormalizingFlowFactories import buildFCNormalizingFlow
 from models.NormalizingFlow import *
 import math
+import re
 
 def batch_iter(X, batch_size, shuffle=False):
     """
@@ -257,16 +258,27 @@ parser.add_argument("-solver", default="CC", type=str, help="Which integral solv
 args = parser.parse_args()
 
 now = datetime.now()
-
+loader = yaml.SafeLoader
+loader.add_implicit_resolver(
+    u'tag:yaml.org,2002:float',
+    re.compile(u'''^(?:
+     [-+]?(?:[0-9][0-9_]*)\\.[0-9_]*(?:[eE][-+]?[0-9]+)?
+    |[-+]?(?:[0-9][0-9_]*)(?:[eE][-+]?[0-9]+)
+    |\\.[0-9_]+(?:[eE][-+][0-9]+)?
+    |[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\\.[0-9_]*
+    |[-+]?\\.(?:inf|Inf|INF)
+    |\\.(?:nan|NaN|NAN))$''', re.X),
+    list(u'-+0123456789.'))
 if args.load_config is not None:
     with open("UCIExperimentsConfigurations.yml", 'r') as stream:
         try:
-            configs = yaml.safe_load(stream)[args.load_config]
+            configs = yaml.load(stream, Loader=loader)[args.load_config]
             for key, val in configs.items():
                 setattr(args, key, val)
         except yaml.YAMLError as exc:
             print(exc)
-
+print(type(configs['weight_decay']))
+exit()
 dir_name = args.dataset if args.load_config is None else args.load_config
 path = "UCIExperiments/" + dir_name + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
 if not(os.path.isdir(path)):
