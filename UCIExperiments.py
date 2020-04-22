@@ -111,6 +111,11 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
         model.train()
         opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
+        if device != "cpu":
+            for state in opt.state.values():
+                for k, v in state.items():
+                    if isinstance(v, torch.Tensor):
+                        state[k] = v.cuda()
 
     for epoch in range(nb_epoch):
         ll_tot = 0
@@ -125,6 +130,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         i = 0
         # Training loop
         model.to(device)
+        opt
         if train:
             for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
                 if normalizer_type is MonotonicNormalizer:
