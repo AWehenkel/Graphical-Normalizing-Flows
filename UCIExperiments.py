@@ -127,28 +127,26 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 for conditioner in model.getConditioners():
                     conditioner.constrainA(zero_threshold=0.)
 
-        i = 0
         # Training loop
         model.to(device)
         if train:
-            for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
+            for i, cur_x in enumerate(batch_iter(data.trn.x, shuffle=True, batch_size=batch_size)):
                 if normalizer_type is MonotonicNormalizer:
                     for normalizer in model.getNormalizers():
                         normalizer.nb_steps = nb_steps + torch.randint(0, 10, [1])[0].item()
                 z, jac = model(cur_x)
-                print(z.mean(), jac.mean())
+                #print(z.mean(), jac.mean())
                 loss = model.loss(z, jac)
-                if math.isnan(loss.item()):
+                if math.isnan(loss.item()) or math.isinf(loss.abs().item()):
                     torch.save(model.state_dict(), path + '/NANmodel.pt')
                     print("Error NAN in loss")
                     exit()
                 ll_tot += loss.detach()
-                i += 1
                 opt.zero_grad()
                 loss.backward(retain_graph=True)
                 opt.step()
 
-            ll_tot /= i
+            ll_tot /= i + 1
             model.step(epoch, ll_tot)
         else:
             ll_tot = 0.
@@ -164,13 +162,27 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 z, jac = model(cur_x)
                 ll = (model.z_log_density(z) + jac)
                 ll_test += ll.mean().item()
-            ll_test /= i
+            ll_test /= i + 1
 
             end = timer()
             dagness = max(model.DAGness())
             logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                         format(epoch, ll_tot.item(), ll_test, dagness, end-start))
 
+            if dagness < 1e-10 and -ll_test < best_valid_loss:
+                logger.info("------- New best validation loss --------")
+                torch.save(model.state_dict(), path + '/best_model.pt')
+                best_valid_loss = -ll_test
+                # Valid loop
+                ll_test = 0.
+                for i, cur_x in enumerate(batch_iter(data.tst.x, shuffle=True, batch_size=batch_size)):
+                    z, jac = model(cur_x)
+                    ll = (model.z_log_density(z) + jac)
+                    ll_test += ll.mean().item()
+                ll_test /= i + 1
+
+                logger.info("epoch: {:d} - Test log-likelihood: {:4f} - <<DAGness>>: {:4f}".format(epoch, ll_test,
+                                                                                                   dagness))
             if epoch % 10 == 0 and conditioner_type is DAGConditioner:
                 stoch_gate, noise_gate, s_thresh = [], [], []
 
@@ -194,20 +206,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     dagness = max(model.DAGness())
                     logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
                                 format(epoch, threshold, ll_test, dagness))
-                if dagness < 1e-5 and -ll_test < best_valid_loss:
-                    logger.info("------- New best validation loss with threshold %f --------" % threshold)
-                    torch.save(model.state_dict(), path + '/best_model.pt')
-                    best_valid_loss = -ll_test
-                    # Valid loop
-                    ll_test = 0.
-                    for i, cur_x in enumerate(batch_iter(data.tst.x, shuffle=True, batch_size=batch_size)):
-                        z, jac = model(cur_x)
-                        ll = (model.z_log_density(z) + jac)
-                        ll_test += ll.mean().item()
-                    ll_test /= i
 
-                    logger.info("epoch: {:d} - Threshold: {:4f} - Test log-likelihood: {:4f} - <<DAGness>>: {:4f}".
-                                format(epoch, threshold, ll_test, dagness))
 
                 for i, conditioner in enumerate(model.getConditioners()):
                     conditioner.h_thresh = threshold

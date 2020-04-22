@@ -14,7 +14,7 @@ class ELUPlus(nn.Module):
         self.elu = nn.ELU()
 
     def forward(self, x):
-        return self.elu(x) + 1.
+        return self.elu(x) + 1.05
 
 
 class IntegrandNet(nn.Module):

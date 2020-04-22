@@ -194,6 +194,6 @@ class DAGConditioner(Conditioner):
                 if self.in_size < 30:
                     print(self.soft_thresholded_A(), flush=True)
                 print(self.loss().abs(), loss_avg.abs(), flush=True)
-                if self.loss().abs() < loss_avg.abs()/10:
+                if self.loss().abs() < loss_avg.abs()/2:
                     print("Update param", flush=True)
                     self.update_dual_param()

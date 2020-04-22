@@ -197,7 +197,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     conditioner.noise_gate = False
                     conditioner.s_thresh = True
                 for threshold in [.95, .5, .1, .01, .0001]:
-                    for conditioner in model.getConditioners():
+                    for conditioner in model.module.getConditioners():
                         conditioner.h_thresh = threshold
                     # Valid loop
                     ll_test = 0.
