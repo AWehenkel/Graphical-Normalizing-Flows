@@ -192,8 +192,8 @@ class DAGConditioner(Conditioner):
         with torch.no_grad():
             if epoch_number % self.nb_epoch_update == 0:
                 if self.in_size < 30:
-                    print(self.soft_thresholded_A())
-
+                    print(self.soft_thresholded_A(), flush=True)
+                print(self.loss().abs(), loss_avg.abs(), flush=True)
                 if self.loss().abs() < loss_avg.abs()/10:
-                    print("Update param")
+                    print("Update param", flush=True)
                     self.update_dual_param()

@@ -100,22 +100,22 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     best_valid_loss = np.inf
 
     opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    # opt = torch.optim.RMSprop(model.parameters(), lr=1e-3)
-    if conditioner_type is DAGConditioner and train:
-        for conditioner in model.getConditioners():
-            conditioner.stoch_gate = True
-            conditioner.noise_gate = False
 
     if load:
         logger.info("Loading model...")
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
         model.train()
-        opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
-        if device != "cpu":
-            for state in opt.state.values():
-                for k, v in state.items():
-                    if isinstance(v, torch.Tensor):
-                        state[k] = v.cuda()
+        if os.path.isfile(path + '/ADAM%s.pt'):
+            opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
+            if device != "cpu":
+                for state in opt.state.values():
+                    for k, v in state.items():
+                        if isinstance(v, torch.Tensor):
+                            state[k] = v.cuda()
+
+    #x = data.trn.x[:20]
+    #print(x, model(x))
+    #exit()
 
     for epoch in range(nb_epoch):
         ll_tot = 0
@@ -130,13 +130,13 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         i = 0
         # Training loop
         model.to(device)
-        opt
         if train:
             for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
                 if normalizer_type is MonotonicNormalizer:
                     for normalizer in model.getNormalizers():
                         normalizer.nb_steps = nb_steps + torch.randint(0, 10, [1])[0].item()
                 z, jac = model(cur_x)
+                print(z.mean(), jac.mean())
                 loss = model.loss(z, jac)
                 if math.isnan(loss.item()):
                     torch.save(model.state_dict(), path + '/NANmodel.pt')
