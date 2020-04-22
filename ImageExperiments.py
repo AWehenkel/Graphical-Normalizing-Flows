@@ -52,9 +52,9 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
                                    ]))
         kwargs = {'num_workers': 0, 'pin_memory': True} if cuda > -1 else {}
 
-        train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True, **kwargs)
-        valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=batch_size, shuffle=True, **kwargs)
-        test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, **kwargs)
+        train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=False, **kwargs)
+        valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=batch_size, shuffle=True, drop_last=False, **kwargs)
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, drop_last=False, **kwargs)
     elif dataset == "CIFAR10":
         im_dim = 3
         im_size = 32  # if args.imagesize is None else args.imagesize
@@ -70,10 +70,10 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
         test_data = dset.CIFAR10(root="./data", train=False, transform=trans(im_size), download=True)
         kwargs = {'num_workers': 0, 'pin_memory': True} if cuda > -1 else {}
 
-        train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True, **kwargs)
+        train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, drop_last=False, shuffle=True, **kwargs)
         # WARNING VALID = TEST
-        valid_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, **kwargs)
-        test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, **kwargs)
+        valid_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, drop_last=False, shuffle=True, **kwargs)
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, drop_last=False, shuffle=True, **kwargs)
     return train_loader, valid_loader, test_loader
 
 

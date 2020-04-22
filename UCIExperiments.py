@@ -111,11 +111,6 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": device}))
         model.train()
         opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": device}))
-        if not train and conditioner_type is DAGConditioner:
-            for net in model.nets:
-                net.dag_embedding.get_dag().stoch_gate = False
-                net.dag_embedding.get_dag().noise_gate = False
-                net.dag_embedding.get_dag().s_thresh = False
 
     for epoch in range(nb_epoch):
         ll_tot = 0
@@ -138,6 +133,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 z, jac = model(cur_x)
                 loss = model.loss(z, jac)
                 if math.isnan(loss.item()):
+                    torch.save(model.state_dict(), path + '/NANmodel.pt')
                     print("Error NAN in loss")
                     exit()
                 ll_tot += loss.detach()
@@ -194,7 +190,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                                 format(epoch, threshold, ll_test, dagness))
                 if dagness < 1e-5 and -ll_test < best_valid_loss:
                     logger.info("------- New best validation loss with threshold %f --------" % threshold)
-                    torch.save(model.state_dict(), path + '/best_model.pt' % epoch)
+                    torch.save(model.state_dict(), path + '/best_model.pt')
                     best_valid_loss = -ll_test
                     # Valid loop
                     ll_test = 0.
