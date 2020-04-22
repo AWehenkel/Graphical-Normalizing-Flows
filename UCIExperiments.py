@@ -69,7 +69,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     device = "cpu" if not(torch.cuda.is_available()) else "cuda:0"
 
     if load:
-        train = False
+        #train = False
         file_number = "_" + file_number if file_number is not None else ""
 
     batch_size = b_size
@@ -129,7 +129,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             for cur_x in batch_iter(data.trn.x, shuffle=True, batch_size=batch_size):
                 if normalizer_type is MonotonicNormalizer:
                     for normalizer in model.getNormalizers():
-                        normalizer.nb_steps  = nb_steps + torch.randint(0, 10, [1])[0].item()
+                        normalizer.nb_steps = nb_steps + torch.randint(0, 10, [1])[0].item()
                 z, jac = model(cur_x)
                 loss = model.loss(z, jac)
                 if math.isnan(loss.item()):
