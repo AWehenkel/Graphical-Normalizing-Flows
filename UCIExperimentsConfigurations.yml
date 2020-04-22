@@ -155,7 +155,7 @@ hepmass-mono-DAG:
   normalizer: 'monotonic'
   int_net: [200, 200, 200]
   nb_steps: 20
-  solver: 'CC'
+  solver: 'CCParallel'
   weight_decay: 1e-4
 
 hepmass-affine-DAG:
@@ -181,7 +181,7 @@ hepmass-mono-coupling:
   normalizer: 'monotonic'
   int_net: [200, 200, 200]
   nb_steps: 20
-  solver: 'CC'
+  solver: 'CCParallel'
   weight_decay: 1e-4
 
 hepmass-affine-coupling:
@@ -204,7 +204,7 @@ hepmass-mono-autoregressive:
   normalizer: 'monotonic'
   int_net: [200, 200, 200]
   nb_steps: 20
-  solver: 'CC'
+  solver: 'CCParallel'
   weight_decay: 1e-4
 
 hepmass-affine-autoregressive:
