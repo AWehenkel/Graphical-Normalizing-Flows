@@ -52,9 +52,9 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
                                    ]))
         kwargs = {'num_workers': 0, 'pin_memory': True} if cuda > -1 else {}
 
-        train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=False, **kwargs)
-        valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=batch_size, shuffle=True, drop_last=False, **kwargs)
-        test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, drop_last=False, **kwargs)
+        train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+        valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
     elif dataset == "CIFAR10":
         im_dim = 3
         im_size = 32  # if args.imagesize is None else args.imagesize
@@ -70,10 +70,10 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
         test_data = dset.CIFAR10(root="./data", train=False, transform=trans(im_size), download=True)
         kwargs = {'num_workers': 0, 'pin_memory': True} if cuda > -1 else {}
 
-        train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, drop_last=False, shuffle=True, **kwargs)
+        train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, drop_last=True, shuffle=True, **kwargs)
         # WARNING VALID = TEST
-        valid_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, drop_last=False, shuffle=True, **kwargs)
-        test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, drop_last=False, shuffle=True, **kwargs)
+        valid_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, drop_last=True, shuffle=True, **kwargs)
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, drop_last=True, shuffle=True, **kwargs)
     return train_loader, valid_loader, test_loader
 
 
@@ -85,7 +85,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
 
     if load:
-        train = False
+        train = True
         file_number = "_" + file_number if file_number is not None else ""
 
     batch_size = b_size
@@ -125,6 +125,11 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         model.load_state_dict(torch.load(path + '/model%s.pt' % file_number, map_location={"cuda:0": master_device}))
         model.train()
         opt.load_state_dict(torch.load(path + '/ADAM%s.pt' % file_number, map_location={"cuda:0": master_device}))
+        if master_device != "cpu":
+            for state in opt.state.values():
+                for k, v in state.items():
+                    if isinstance(v, torch.Tensor):
+                        state[k] = v.cuda()
     logger.info("...Model built.")
     logger.info("Training starts:")
 
@@ -158,6 +163,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 print("Dagness:", model.module.DAGness())
 
             ll_tot /= (batch_idx + 1)
+            torch.cuda.empty_cache()
             model.module.step(epoch, ll_tot)
 
         else:
@@ -214,15 +220,15 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f}".
                         format(epoch, threshold, ll_test, bpp_test, dagness))
 
-                if dagness < 1e-5 and -ll_test < best_valid_loss:
+                if dagness < 1e-10 and -ll_test < best_valid_loss:
                     logger.info("------- New best validation loss with threshold %f --------" % threshold)
-                    torch.save(model.state_dict(), path + '/best_model.pt' % epoch)
+                    torch.save(model.state_dict(), path + '/best_model.pt')
                     best_valid_loss = -ll_test
                     # Valid loop
                     ll_test = 0.
                     for batch_idx, (cur_x, target) in enumerate(test_loader):
-                        z, jac = model(cur_x)
-                        ll = (model.z_log_density(z) + jac)
+                        z, jac = model(cur_x.view(batch_size, -1).float().to(master_device))
+                        ll = (model.module.z_log_density(z) + jac)
                         ll_test += ll.mean().item()
                         bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
 
@@ -231,16 +237,16 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     logger.info("epoch: {:d} - Threshold: {:4f} - Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".
                                 format(epoch, threshold, ll_test, bpp_test, dagness))
                     if dataset == "MNIST":
-                        A_1 = model.module.getConditioners()[0].soft_thresholded_A()[0, :].view(28, 28)
+                        A_1 = model.module.getConditioners()[0].soft_thresholded_A()[0, :].view(28, 28).cpu().numpy()
                         plt.matshow(A_1)
                         plt.colorbar()
                         plt.savefig(path + "/A_1_epoch_%d.png" % epoch)
-                        A_350 = model.module.getConditioners()[0].soft_thresholded_A()[350, :].view(28, 28)
+                        A_350 = model.module.getConditioners()[0].soft_thresholded_A()[350, :].view(28, 28).cpu().numpy()
                         plt.matshow(A_350)
                         plt.colorbar()
                         plt.savefig(path + "/A_350_epoch_%d.png" % epoch)
                     elif dataset == "CIFAR10":
-                        A_1 = model.module.getConditioners()[0].soft_thresholded_A()[0, :].view(3, 32, 32)
+                        A_1 = model.module.getConditioners()[0].soft_thresholded_A()[0, :].view(3, 32, 32).cpu().numpy()
                         plt.subplot(1, 3, 1)
                         plt.matshow(A_1[0, :, :])
                         plt.subplot(1, 3, 2)
@@ -249,7 +255,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                         plt.matshow(A_1[2, :, :])
                         plt.colorbar()
                         plt.savefig(path + "/A_1_epoch_%d.png" % epoch)
-                        A_1500 = model.module.getConditioners()[0].soft_thresholded_A()[1500, :].view(3, 32, 32)
+                        A_1500 = model.module.getConditioners()[0].soft_thresholded_A()[1500, :].view(3, 32, 32).cpu().numpy()
                         plt.subplot(1, 3, 1)
                         plt.matshow(A_1500[0, :, :])
                         plt.subplot(1, 3, 2)
@@ -271,6 +277,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
         torch.save(model.state_dict(), path + '/model.pt')
         torch.save(opt.state_dict(), path + '/ADAM.pt')
+        torch.cuda.empty_cache()
 
 import argparse
 

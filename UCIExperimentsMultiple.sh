@@ -12,5 +12,5 @@ supp_args=$(printf "%s "  "${args[@]}")
 source activate UMNN
 for config in "${args[@]}"
 do
-    python UCIExperiments.py $config &
+    srun python UCIExperiments.py -load_config $config &
 done

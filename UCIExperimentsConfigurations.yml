@@ -230,7 +230,7 @@ miniboone-mono-DAG:
   normalizer: 'monotonic'
   int_net: [40, 40, 40]
   nb_steps: 20
-  solver: 'CC'
+  solver: 'CCParallel'
   weight_decay: 1e-2
 
 miniboone-affine-DAG:
@@ -256,7 +256,7 @@ miniboone-mono-coupling:
   normalizer: 'monotonic'
   int_net: [40, 40, 40]
   nb_steps: 20
-  solver: 'CC'
+  solver: 'CCParallel'
   weight_decay: 1e-2
 
 miniboone-affine-coupling:
@@ -279,7 +279,7 @@ miniboone-mono-autoregressive:
   normalizer: 'monotonic'
   int_net: [40, 40, 40]
   nb_steps: 20
-  solver: 'CC'
+  solver: 'CCParallel'
   weight_decay: 1e-2
 
 miniboone-affine-autoregressive:
@@ -305,7 +305,7 @@ bsds300-mono-DAG:
   normalizer: 'monotonic'
   int_net: [150, 150, 150]
   nb_steps: 20
-  solver: 'CC'
+  solver: 'CCParallel'
   weight_decay: 1e-4
 
 bsds300-affine-DAG:
@@ -331,7 +331,7 @@ bsds300-mono-coupling:
   normalizer: 'monotonic'
   int_net: [150, 150, 150]
   nb_steps: 20
-  solver: 'CC'
+  solver: 'CCParallel'
   weight_decay: 1e-4
 
 bsds300-affine-coupling:
@@ -354,7 +354,7 @@ bsds300-mono-autoregressive:
   normalizer: 'monotonic'
   int_net: [150, 150, 150]
   nb_steps: 20
-  solver: 'CC'
+  solver: 'CCParallel'
   weight_decay: 1e-4
 
 bsds300-affine-autoregressive:
