@@ -16,7 +16,8 @@ from models.NormalizingFlowFactories import buildMNISTNormalizingFlow, buildCIFA
 from models.Normalizers import AffineNormalizer, MonotonicNormalizer
 import torchvision.datasets as dset
 import torchvision.transforms as tforms
-
+import matplotlib.animation as animation
+import matplotlib
 
 def add_noise(x):
     """
@@ -79,7 +80,7 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
 
 def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000, b_size=100,
           int_net=[50, 50, 50], all_args=None, file_number=None, train=True, solver="CC", weight_decay=1e-5,
-          learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine'):
+          learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine', nb_flow=[1]):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -109,9 +110,9 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         normalizer_args = {"integrand_net": int_net, "cond_size": 30, "nb_steps": 15, "solver": solver}
 
     if dataset == "MNIST":
-        inner_model = buildMNISTNormalizingFlow([2, 2, 2], normalizer_type, normalizer_args, l1)
+        inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1)
     elif dataset == "CIFAR10":
-        inner_model = buildCIFAR10NormalizingFlow([2, 2, 2, 2], normalizer_type, normalizer_args, l1)
+        inner_model = buildCIFAR10NormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1)
     else:
         logger.info("Wrong dataset name. Training aborted.")
         exit()
@@ -236,39 +237,35 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     bpp_test /= batch_idx + 1
                     logger.info("epoch: {:d} - Threshold: {:4f} - Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".
                                 format(epoch, threshold, ll_test, bpp_test, dagness))
-                    if dataset == "MNIST":
-                        A_1 = model.module.getConditioners()[0].soft_thresholded_A()[0, :].view(28, 28).cpu().numpy()
-                        plt.matshow(A_1)
-                        plt.colorbar()
-                        plt.savefig(path + "/A_1_epoch_%d.png" % epoch)
-                        A_350 = model.module.getConditioners()[0].soft_thresholded_A()[350, :].view(28, 28).cpu().numpy()
-                        plt.matshow(A_350)
-                        plt.colorbar()
-                        plt.savefig(path + "/A_350_epoch_%d.png" % epoch)
-                    elif dataset == "CIFAR10":
-                        A_1 = model.module.getConditioners()[0].soft_thresholded_A()[0, :].view(3, 32, 32).cpu().numpy()
-                        plt.subplot(1, 3, 1)
-                        plt.matshow(A_1[0, :, :])
-                        plt.subplot(1, 3, 2)
-                        plt.matshow(A_1[1, :, :])
-                        plt.subplot(1, 3, 3)
-                        plt.matshow(A_1[2, :, :])
-                        plt.colorbar()
-                        plt.savefig(path + "/A_1_epoch_%d.png" % epoch)
-                        A_1500 = model.module.getConditioners()[0].soft_thresholded_A()[1500, :].view(3, 32, 32).cpu().numpy()
-                        plt.subplot(1, 3, 1)
-                        plt.matshow(A_1500[0, :, :])
-                        plt.subplot(1, 3, 2)
-                        plt.matshow(A_1500[1, :, :])
-                        plt.subplot(1, 3, 3)
-                        plt.matshow(A_1500[2, :, :])
-                        plt.colorbar()
-                        plt.savefig(path + "/A_1500_epoch_%d.png" % epoch)
                 for i, conditioner in enumerate(model.module.getConditioners()):
                     conditioner.h_thresh = 0.
                     conditioner.stoch_gate = stoch_gate[i]
                     conditioner.noise_gate = noise_gate[i]
                     conditioner.s_thresh = s_thresh[i]
+
+                in_s = 784 if dataset == "MNIST" else 3*32*32
+                a_tmp = model.module.getConditioners()[0].soft_thresholded_A()[0, :]
+                a_tmp = a_tmp.view(28, 28).cpu().numpy() if dataset == "MNIST" else a_tmp.view(3, 32, 32).cpu().numpy()
+                fig, ax = plt.subplots()
+                mat = ax.matshow(a_tmp)
+                plt.colorbar(mat)
+                current_cmap = matplotlib.cm.get_cmap()
+                current_cmap.set_bad(color='red')
+                def update(i):
+                    A = model.module.getConditioners()[0].soft_thresholded_A()[i, :].cpu().numpy()
+                    A[i] = np.nan
+                    if dataset == "MNIST":
+                        A = A.reshape(28, 28)
+                    elif dataset == "CIFAR10":
+                        A = A.reshape(3, 32, 32)
+                    mat.set_data(A)
+                    return mat
+
+                # Set up formatting for the movie files
+                Writer = animation.writers['ffmpeg']
+                writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+                ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, blit=True, save_count=0)
+                ani.save('A_epoch_%d.mp4' % epoch, writer=writer)
 
         if epoch % nb_step_dual == 0:
             logger.info("Saving model N°%d" % epoch)
@@ -294,7 +291,7 @@ parser.add_argument("-nb_steps", default=20, type=int, help="Number of integrati
 parser.add_argument("-f_number", default=None, type=str, help="Number of heating steps.")
 parser.add_argument("-solver", default="CC", type=str, help="Which integral solver to use.",
                     choices=["CC", "CCParallel"])
-parser.add_argument("-nb_flow", type=int, default=1, help="Number of steps in the flow.")
+parser.add_argument("-nb_flow", type=int, default=[1], nargs="+", help="Number of steps in the flow.")
 parser.add_argument("-test", default=False, action="store_true")
 parser.add_argument("-weight_decay", default=1e-5, type=float, help="Weight decay value")
 parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight decay value")
@@ -311,7 +308,7 @@ path = args.dataset + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == 
 if not (os.path.isdir(path)):
     os.makedirs(path)
 train(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
-      int_net=args.int_net, b_size=args.b_size, all_args=args,
+      int_net=args.int_net, b_size=args.b_size, all_args=args, nb_flow=args.nb_flow,
       nb_steps=args.nb_steps, file_number=args.f_number, norm_type=args.normalizer,
       solver=args.solver, train=not args.test, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
       batch_per_optim_step=args.batch_per_optim_step, n_gpu=args.nb_gpus)

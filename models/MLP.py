@@ -47,6 +47,7 @@ class MNISTCNN(nn.Module):
         x = self.fc2(x).view(b_size, -1)
         return x
 
+
 class CIFAR10CNN(nn.Module):
     def __init__(self, out_d=10, fc_l=[400, 128, 84], size_img=[3, 32, 32], k_size=5):
         super(CIFAR10CNN, self).__init__()
