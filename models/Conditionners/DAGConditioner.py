@@ -57,6 +57,7 @@ class DAGConditioner(Conditioner):
         self.register_buffer("prev_trace", self.get_power_trace())
 
         self.nb_epoch_update = nb_epoch_update
+        self.no_update = 0
 
     def get_dag(self):
         return self
@@ -66,9 +67,8 @@ class DAGConditioner(Conditioner):
         self.noise_gate = False
         self.s_thresh = False
         self.h_thresh = 0.
-        self.A *= (self.soft_thresholded_A().clone().abs() > zero_threshold).float()
+        self.A.data = (self.soft_thresholded_A().data.clone().abs() > zero_threshold).float()
         self.A *= 1. - torch.eye(self.in_size, device=self.A.device)
-        self.A /= self.A + (self.A == 0).float()
         self.A.requires_grad = False
         self.A.grad = None
 
@@ -180,7 +180,21 @@ class DAGConditioner(Conditioner):
                 print(self.c)
                 self.prev_trace = lag_const
             elif self.dag_const > 0.:
-                print("DAGness is very low: %f" % torch.log(lag_const), flush=True)
+                print("DAGness is very low: %f -> Post processing" % torch.log(lag_const), flush=True)
+                self.post_process(1e-3)
+                _, S, _ = torch.svd(self.A)
+                sigma_max = S.max().item()
+                self.alpha = torch.tensor(1. / sigma_max ** 2)
+                dag_const = self.get_power_trace()
+                print("DAGness is still very low: %f" % torch.log(dag_const), flush=True)
+                if dag_const > 0.:
+                    print("Error in post-processing.", flush=True)
+                else:
+                    self.dag_const = 0.
+                    self.l1_weight = 0.
+
+            else:
+                print("DAGness is still very low: %f" % torch.log(self.get_power_trace()), flush=True)
         return lag_const
 
     def loss(self):
@@ -194,7 +208,10 @@ class DAGConditioner(Conditioner):
                 if self.in_size < 30:
                     print(self.soft_thresholded_A(), flush=True)
                 print(self.loss().abs(), loss_avg.abs(), flush=True)
-                if True or self.loss().abs() < loss_avg.abs()/2:
+                if self.loss().abs() < loss_avg.abs()/2 or self.no_update > 2:
                     print("Update param", flush=True)
                     self.update_dual_param()
-
+                    self.no_update = 0
+                else:
+                    print("No Update param", flush=True)
+                    self.no_update += 1

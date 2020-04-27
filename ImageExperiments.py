@@ -117,7 +117,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         logger.info("Wrong dataset name. Training aborted.")
         exit()
     model = nn.DataParallel(inner_model, device_ids=list(range(n_gpu))).to(master_device)
-
+    pytorch_total_params = sum(p.numel() for p in model.parameters())
+    logger.info("Number of parameters: %d" % pytorch_total_params)
 
     opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
@@ -264,8 +265,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 # Set up formatting for the movie files
                 Writer = animation.writers['ffmpeg']
                 writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
-                ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, blit=True, save_count=0)
-                ani.save('A_epoch_%d.mp4' % epoch, writer=writer)
+                ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
+                ani.save(path + '/A_epoch_%d.mp4' % epoch, writer=writer)
 
         if epoch % nb_step_dual == 0:
             logger.info("Saving model N°%d" % epoch)
@@ -291,7 +292,7 @@ parser.add_argument("-nb_steps", default=20, type=int, help="Number of integrati
 parser.add_argument("-f_number", default=None, type=str, help="Number of heating steps.")
 parser.add_argument("-solver", default="CC", type=str, help="Which integral solver to use.",
                     choices=["CC", "CCParallel"])
-parser.add_argument("-nb_flow", type=int, default=[1], nargs="+", help="Number of steps in the flow.")
+parser.add_argument("-nb_flow", default=[1], nargs="+", type=int, help="Number of steps in the flow.")
 parser.add_argument("-test", default=False, action="store_true")
 parser.add_argument("-weight_decay", default=1e-5, type=float, help="Weight decay value")
 parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight decay value")
