@@ -222,7 +222,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f}".
                         format(epoch, threshold, ll_test, bpp_test, dagness))
 
-                if dagness < 1e-10 and -ll_test < best_valid_loss:
+                if dagness < 1e-20 and -ll_test < best_valid_loss:
                     logger.info("------- New best validation loss with threshold %f --------" % threshold)
                     torch.save(model.state_dict(), path + '/best_model.pt')
                     best_valid_loss = -ll_test

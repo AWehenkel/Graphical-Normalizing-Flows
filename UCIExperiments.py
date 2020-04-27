@@ -169,7 +169,7 @@ def train(dataset="POWER", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             logger.info("epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                         format(epoch, ll_tot.item(), ll_test, dagness, end-start))
 
-            if dagness < 1e-10 and -ll_test < best_valid_loss:
+            if dagness < 1e-20 and -ll_test < best_valid_loss:
                 logger.info("------- New best validation loss --------")
                 torch.save(model.state_dict(), path + '/best_model.pt')
                 best_valid_loss = -ll_test
