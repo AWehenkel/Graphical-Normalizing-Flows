@@ -26,7 +26,7 @@ def buildFCNormalizingFlow(nb_steps, conditioner_type, conditioner_args, normali
     return FCNormalizingFlow(flow_steps, NormalLogDensity())
 
 
-def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, l1=0.):
+def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, l1=0., nb_epoch_update=10):
     if len(nb_inner_steps) == 3:
         img_sizes = [[1, 28, 28], [1, 14, 14], [1, 7, 7]]
         dropping_factors = [[1, 2, 2], [1, 2, 2]]
@@ -39,7 +39,7 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
             for step in range(nb_inner_steps[i]):
                 emb_s = 2 if normalizer_type is AffineNormalizer else 30
                 hidden = MNISTCNN(fc_l=fc, size_img=img_sizes[i], out_d=emb_s)
-                cond = DAGConditioner(in_size, hidden, emb_s, l1=l1)
+                cond = DAGConditioner(in_size, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update)
                 norm = normalizer_type(**normalizer_args)
                 flow_step = NormalizingFlowStep(cond, norm)
                 inner_steps.append(flow_step)
@@ -53,7 +53,7 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
         for step in range(nb_inner_steps[0]):
             emb_s = 2 if normalizer_type is AffineNormalizer else 30
             hidden = MNISTCNN(fc_l=[2304, 128], size_img=[1, 28, 28], out_d=emb_s)
-            cond = DAGConditioner(1*28*28, hidden, emb_s, l1=l1)
+            cond = DAGConditioner(1*28*28, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update)
             norm = normalizer_type(**normalizer_args)
             flow_step = NormalizingFlowStep(cond, norm)
             inner_steps.append(flow_step)
@@ -63,7 +63,7 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
         return None
 
 
-def buildCIFAR10NormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, l1=0.):
+def buildCIFAR10NormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, l1=0., nb_epoch_update=5):
     if len(nb_inner_steps) == 4:
         img_sizes = [[3, 32, 32], [1, 32, 32], [1, 16, 16], [1, 8, 8]]
         dropping_factors = [[3, 1, 1], [1, 2, 2], [1, 2, 2]]
@@ -77,7 +77,7 @@ def buildCIFAR10NormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args
             for step in range(nb_inner_steps[i]):
                 emb_s = 2 if normalizer_type is AffineNormalizer else 30
                 hidden = CIFAR10CNN(out_d=emb_s, fc_l=fc, size_img=img_sizes[i], k_size=k_sizes[i])
-                cond = DAGConditioner(in_size, hidden, emb_s, l1=l1)
+                cond = DAGConditioner(in_size, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update)
                 norm = normalizer_type(**normalizer_args)
                 flow_step = NormalizingFlowStep(cond, norm)
                 inner_steps.append(flow_step)
@@ -91,7 +91,7 @@ def buildCIFAR10NormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args
         for step in range(nb_inner_steps[0]):
             emb_s = 2 if normalizer_type is AffineNormalizer else 30
             hidden = CIFAR10CNN(fc_l=[400, 128, 84], size_img=[3, 32, 32], out_d=emb_s, k_size=3)
-            cond = DAGConditioner(3*32*32, hidden, emb_s, l1=l1)
+            cond = DAGConditioner(3*32*32, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update)
             norm = normalizer_type(**normalizer_args)
             flow_step = NormalizingFlowStep(cond, norm)
             inner_steps.append(flow_step)
