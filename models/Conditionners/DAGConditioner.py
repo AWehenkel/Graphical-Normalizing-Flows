@@ -189,9 +189,16 @@ class DAGConditioner(Conditioner):
                 print("DAGness is still very low: %f" % torch.log(dag_const), flush=True)
                 if dag_const > 0.:
                     print("Error in post-processing.", flush=True)
+                    self.A.requires_grad = True
+                    self.A.grad = self.A*0
+                    self.stoch_gate = True
+                    self.noise_gate = False
+                    self.s_thresh = True
+                    self.h_thresh = 0.
+                    self.A *= 2
                 else:
                     self.dag_const = torch.tensor(0.)
-                    self.l1_weight = torch.tensor(0.)
+                    #self.l1_weight = torch.tensor(0.)
                     print("Post processing successful.")
                     print("Number of edges is %d VS number max is %d" %
                           (int(self.A.sum().item()), ((self.d - 1)*self.d)/2), flush=True)
