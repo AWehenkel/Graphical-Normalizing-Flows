@@ -1,4 +1,3 @@
-from models import DAGNF, MLP, MNISTCNN
 import torch
 from timeit import default_timer as timer
 import lib.utils as utils
@@ -252,6 +251,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 plt.colorbar(mat)
                 current_cmap = matplotlib.cm.get_cmap()
                 current_cmap.set_bad(color='red')
+                mat.set_clim(0, 1.)
                 def update(i):
                     A = model.module.getConditioners()[0].soft_thresholded_A()[i, :].cpu().numpy()
                     A[i] = np.nan

@@ -196,6 +196,10 @@ class DAGConditioner(Conditioner):
                     self.s_thresh = True
                     self.h_thresh = 0.
                     self.A *= 2
+                    _, S, _ = torch.svd(self.A)
+                    sigma_max = S.max().item()
+                    self.alpha = torch.tensor(1. / sigma_max ** 2)
+                    self.prev_trace = self.get_power_trace()
                 else:
                     self.dag_const = torch.tensor(0.)
                     #self.l1_weight = torch.tensor(0.)
