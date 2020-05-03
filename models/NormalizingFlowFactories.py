@@ -90,7 +90,7 @@ def buildCIFAR10NormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args
         inner_steps = []
         for step in range(nb_inner_steps[0]):
             emb_s = 2 if normalizer_type is AffineNormalizer else 30
-            hidden = CIFAR10CNN(fc_l=[400, 128, 84], size_img=[3, 32, 32], out_d=emb_s, k_size=3)
+            hidden = CIFAR10CNN(fc_l=[400, 128, 84], size_img=[3, 32, 32], out_d=emb_s, k_size=5)
             cond = DAGConditioner(3*32*32, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update)
             norm = normalizer_type(**normalizer_args)
             flow_step = NormalizingFlowStep(cond, norm)

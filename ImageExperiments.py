@@ -116,6 +116,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         logger.info("Wrong dataset name. Training aborted.")
         exit()
     model = nn.DataParallel(inner_model, device_ids=list(range(n_gpu))).to(master_device)
+    logger.info(str(model))
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     logger.info("Number of parameters: %d" % pytorch_total_params)
 

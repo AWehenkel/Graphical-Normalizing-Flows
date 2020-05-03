@@ -52,8 +52,9 @@ class DAGConditioner(Conditioner):
         self.d = in_size
         self.tol = 1e-20
         _, S, _ = torch.svd(self.A)
+        S = S.abs()
         sigma_max = S.max().item()
-        self.register_buffer("alpha", torch.tensor(1. / sigma_max ** 2))
+        self.register_buffer("alpha", torch.tensor(1. / sigma_max) ** 2)
         self.register_buffer("prev_trace", self.get_power_trace())
 
         self.nb_epoch_update = nb_epoch_update
@@ -169,8 +170,9 @@ class DAGConditioner(Conditioner):
     def update_dual_param(self):
         with torch.no_grad():
             _, S, _ = torch.svd(self.A)
+            S = S.abs()
             sigma_max = S.max().item()
-            self.alpha = torch.tensor(1. / sigma_max ** 2)
+            self.alpha = torch.tensor(1. / sigma_max)**2
             lag_const = self.get_power_trace()
             if self.dag_const > 0. and lag_const > self.tol:
                 self.lambd = self.lambd + self.c * lag_const
@@ -181,10 +183,11 @@ class DAGConditioner(Conditioner):
                 self.prev_trace = lag_const
             elif self.dag_const > 0.:
                 print("DAGness is very low: %f -> Post processing" % torch.log(lag_const), flush=True)
-                self.post_process(1e-3)
+                self.post_process(1e-1)
                 _, S, _ = torch.svd(self.A)
+                S = S.abs()
                 sigma_max = S.max().item()
-                self.alpha = torch.tensor(1. / sigma_max ** 2)
+                self.alpha = torch.tensor(1. / sigma_max) ** 2
                 dag_const = self.get_power_trace()
                 print("DAGness is still very low: %f" % torch.log(dag_const), flush=True)
                 if dag_const > 0.:
@@ -197,8 +200,9 @@ class DAGConditioner(Conditioner):
                     self.h_thresh = 0.
                     self.A *= 2
                     _, S, _ = torch.svd(self.A)
+                    S = S.abs()
                     sigma_max = S.max().item()
-                    self.alpha = torch.tensor(1. / sigma_max ** 2)
+                    self.alpha = torch.tensor(1. / sigma_max) ** 2
                     self.prev_trace = self.get_power_trace()
                 else:
                     self.dag_const = torch.tensor(0.)
