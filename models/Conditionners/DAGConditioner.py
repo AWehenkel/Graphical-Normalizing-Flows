@@ -22,9 +22,12 @@ class DAGMLP(nn.Module):
 
 class DAGConditioner(Conditioner):
     def __init__(self, in_size, hidden, out_size, cond_in=0, soft_thresholding=True, h_thresh=0., gumble_T=1.,
-                 hot_encoding=False, l1=0., nb_epoch_update=1):
+                 hot_encoding=False, l1=0., nb_epoch_update=1, A_prior=None):
         super(DAGConditioner, self).__init__()
-        self.A = nn.Parameter(torch.ones(in_size, in_size) * 1.5 + torch.randn((in_size, in_size)) * .02)
+        if A_prior is None:
+            self.A = nn.Parameter(torch.ones(in_size, in_size) * 1.5 + torch.randn((in_size, in_size)) * .02)
+        else:
+            self.A = nn.Parameter(A_prior)
         self.in_size = in_size
         self.s_thresh = soft_thresholding
         self.h_thresh = h_thresh

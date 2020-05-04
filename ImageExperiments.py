@@ -79,13 +79,13 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
 
 def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000, b_size=100,
           int_net=[50, 50, 50], all_args=None, file_number=None, train=True, solver="CC", weight_decay=1e-5,
-          learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine', nb_flow=[1]):
+          learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine', nb_flow=[1], hot_encoding=True,
+          prior_A_kernel=None):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
 
     if load:
-        train = True
         file_number = "_" + file_number if file_number is not None else ""
 
     batch_size = b_size
@@ -110,10 +110,11 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
     if dataset == "MNIST":
         inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
-                                                nb_epoch_update=nb_step_dual, hot_encoding=True)
+                                                nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
+                                                prior_kernel=prior_A_kernel)
     elif dataset == "CIFAR10":
         inner_model = buildCIFAR10NormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
-                                                  nb_epoch_update=nb_step_dual, hot_encoding=True)
+                                                  nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding)
     else:
         logger.info("Wrong dataset name. Training aborted.")
         exit()
@@ -272,6 +273,21 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
                 ani.save(path + '/A_epoch_%d.mp4' % epoch, writer=writer)
 
+                deg_in = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(0).cpu().numpy()
+                deg_out = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(1).cpu().numpy()
+                fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+                if dataset == "MNIST":
+                    shape = (28, 28)
+                elif dataset == "CIFAR10":
+                    shape = (3, 32, 32)
+                res0 = ax[0].matshow(np.log(deg_in).reshape(shape))
+                ax[0].set(title="In degrees")
+                fig.colorbar(res0, ax=ax[0])
+                res1 = ax[1].matshow(np.log(deg_out.reshape(shape)))
+                ax[1].set(title="Out degrees")
+                fig.colorbar(res1, ax=ax[1])
+                plt.savefig(path + '/A_degrees_epoch_%d.png' % epoch)
+
         if epoch % nb_step_dual == 0:
             logger.info("Saving model N°%d" % epoch)
             torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
@@ -304,6 +320,8 @@ parser.add_argument("-batch_per_optim_step", default=1, type=int, help="Number o
 parser.add_argument("-nb_gpus", default=1, type=int, help="Number of gpus to train on")
 parser.add_argument("-dataset", default="MNIST", type=str, choices=["MNIST", "CIFAR10"])
 parser.add_argument("-normalizer", default="Affine", type=str, choices=["Affine", "Monotonic"])
+parser.add_argument("-no_hot_encoding", default=False, action="store_true")
+parser.add_argument("-prior_A_kernel", default=None, type=int)
 
 args = parser.parse_args()
 from datetime import datetime
@@ -316,4 +334,5 @@ train(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_step
       int_net=args.int_net, b_size=args.b_size, all_args=args, nb_flow=args.nb_flow,
       nb_steps=args.nb_steps, file_number=args.f_number, norm_type=args.normalizer,
       solver=args.solver, train=not args.test, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
-      batch_per_optim_step=args.batch_per_optim_step, n_gpu=args.nb_gpus)
+      batch_per_optim_step=args.batch_per_optim_step, n_gpu=args.nb_gpus, hot_encoding=not args.no_hot_encoding,
+      prior_A_kernel=args.prior_A_kernel)
