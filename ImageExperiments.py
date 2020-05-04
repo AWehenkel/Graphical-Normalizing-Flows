@@ -109,9 +109,11 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         normalizer_args = {"integrand_net": int_net, "cond_size": 30, "nb_steps": 15, "solver": solver}
 
     if dataset == "MNIST":
-        inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1, nb_epoch_update=nb_step_dual)
+        inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
+                                                nb_epoch_update=nb_step_dual, hot_encoding=True)
     elif dataset == "CIFAR10":
-        inner_model = buildCIFAR10NormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1, nb_epoch_update=nb_step_dual)
+        inner_model = buildCIFAR10NormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
+                                                  nb_epoch_update=nb_step_dual, hot_encoding=True)
     else:
         logger.info("Wrong dataset name. Training aborted.")
         exit()
@@ -166,7 +168,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
             ll_tot /= (batch_idx + 1)
             torch.cuda.empty_cache()
-            model.module.step(epoch, ll_tot)
+            if epoch > 0:
+                model.module.step(epoch, ll_tot)
 
         else:
             ll_tot = 0.

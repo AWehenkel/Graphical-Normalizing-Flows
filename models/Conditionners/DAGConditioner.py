@@ -169,10 +169,6 @@ class DAGConditioner(Conditioner):
 
     def update_dual_param(self):
         with torch.no_grad():
-            _, S, _ = torch.svd(self.A)
-            S = S.abs()
-            sigma_max = S.max().item()
-            self.alpha = torch.tensor(1. / sigma_max)**2
             lag_const = self.get_power_trace()
             if self.dag_const > 0. and lag_const > self.tol:
                 self.lambd = self.lambd + self.c * lag_const
@@ -187,6 +183,7 @@ class DAGConditioner(Conditioner):
                 _, S, _ = torch.svd(self.A)
                 S = S.abs()
                 sigma_max = S.max().item()
+                sigma_max = 1 if sigma_max <= 0 else sigma_max
                 self.alpha = torch.tensor(1. / sigma_max) ** 2
                 dag_const = self.get_power_trace()
                 print("DAGness is still very low: %f" % torch.log(dag_const), flush=True)

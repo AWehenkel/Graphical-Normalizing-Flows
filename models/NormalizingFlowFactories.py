@@ -26,7 +26,7 @@ def buildFCNormalizingFlow(nb_steps, conditioner_type, conditioner_args, normali
     return FCNormalizingFlow(flow_steps, NormalLogDensity())
 
 
-def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, l1=0., nb_epoch_update=10):
+def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, l1=0., nb_epoch_update=10, hot_encoding=False):
     if len(nb_inner_steps) == 3:
         img_sizes = [[1, 28, 28], [1, 14, 14], [1, 7, 7]]
         dropping_factors = [[1, 2, 2], [1, 2, 2]]
@@ -38,8 +38,10 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
             inner_steps = []
             for step in range(nb_inner_steps[i]):
                 emb_s = 2 if normalizer_type is AffineNormalizer else 30
+                if hot_encoding and not normalizer_type is AffineNormalizer:
+                    emb_s = 30 + in_size
                 hidden = MNISTCNN(fc_l=fc, size_img=img_sizes[i], out_d=emb_s)
-                cond = DAGConditioner(in_size, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update)
+                cond = DAGConditioner(in_size, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update, hot_encoding=hot_encoding)
                 norm = normalizer_type(**normalizer_args)
                 flow_step = NormalizingFlowStep(cond, norm)
                 inner_steps.append(flow_step)
