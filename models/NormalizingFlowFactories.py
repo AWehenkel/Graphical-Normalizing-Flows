@@ -38,11 +38,14 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
             inner_steps = []
             for step in range(nb_inner_steps[i]):
                 emb_s = 2 if normalizer_type is AffineNormalizer else 30
-                if hot_encoding and not normalizer_type is AffineNormalizer:
-                    emb_s = 30 + in_size
+
                 hidden = MNISTCNN(fc_l=fc, size_img=img_sizes[i], out_d=emb_s)
                 cond = DAGConditioner(in_size, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update, hot_encoding=hot_encoding)
-                norm = normalizer_type(**normalizer_args)
+                if hot_encoding and not (normalizer_type is AffineNormalizer):
+                    emb_s = 30 + in_size
+                    norm = normalizer_type(**normalizer_args, cond_size=emb_s)
+                else:
+                    norm = normalizer_type(**normalizer_args)
                 flow_step = NormalizingFlowStep(cond, norm)
                 inner_steps.append(flow_step)
             flow = FCNormalizingFlow(inner_steps, None)
@@ -55,8 +58,13 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
         for step in range(nb_inner_steps[0]):
             emb_s = 2 if normalizer_type is AffineNormalizer else 30
             hidden = MNISTCNN(fc_l=[2304, 128], size_img=[1, 28, 28], out_d=emb_s)
-            cond = DAGConditioner(1*28*28, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update)
-            norm = normalizer_type(**normalizer_args)
+            cond = DAGConditioner(1*28*28, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update, hot_encoding=hot_encoding)
+            if normalizer_type is MonotonicNormalizer:
+                emb_s = 30 + 28*28 if hot_encoding else 30
+                print(emb_s)
+                norm = normalizer_type(**normalizer_args, cond_size=emb_s)
+            else:
+                norm = normalizer_type(**normalizer_args)
             flow_step = NormalizingFlowStep(cond, norm)
             inner_steps.append(flow_step)
         flow = FCNormalizingFlow(inner_steps, NormalLogDensity())

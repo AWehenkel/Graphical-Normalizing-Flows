@@ -106,7 +106,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         normalizer_args = {}
     else:
         normalizer_type = MonotonicNormalizer
-        normalizer_args = {"integrand_net": int_net, "cond_size": 30, "nb_steps": 15, "solver": solver}
+        normalizer_args = {"integrand_net": int_net, "nb_steps": 15, "solver": solver}
 
     if dataset == "MNIST":
         inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
