@@ -27,7 +27,7 @@ class DAGConditioner(Conditioner):
         if A_prior is None:
             self.A = nn.Parameter(torch.ones(in_size, in_size) * 1.5 + torch.randn((in_size, in_size)) * .02)
         else:
-            self.A = nn.Parameter(A_prior)
+            self.A = nn.Parameter(A_prior) * 1.5 + torch.randn((in_size, in_size)) * .5
         self.in_size = in_size
         self.s_thresh = soft_thresholding
         self.h_thresh = h_thresh
@@ -54,14 +54,16 @@ class DAGConditioner(Conditioner):
         self.register_buffer("dag_const", torch.tensor(1.))
         self.d = in_size
         self.tol = 1e-20
-        _, S, _ = torch.svd(self.A)
+        _, S, _ = torch.svd(self.A**2)
         S = S.abs()
         sigma_max = S.max().item()
+        #print(sigma_max)
         self.register_buffer("alpha", torch.tensor(1. / sigma_max) ** 2)
         self.register_buffer("prev_trace", self.get_power_trace())
-
+        #print(self.prev_trace)
         self.nb_epoch_update = nb_epoch_update
         self.no_update = 0
+        #exit()
 
     def get_dag(self):
         return self
@@ -109,6 +111,7 @@ class DAGConditioner(Conditioner):
         return self.A**2 * (self.A**2 > self.h_thresh).float()
 
     def forward(self, x, context=None):
+        print(self.get_power_trace())
         if self.h_thresh > 0:
             if self.stoch_gate:
                 e = (x.unsqueeze(1).expand(-1, self.in_size, -1) * self.stochastic_gate(self.hard_thresholded_A().unsqueeze(0)
@@ -184,7 +187,7 @@ class DAGConditioner(Conditioner):
             elif self.dag_const > 0.:
                 print("DAGness is very low: %f -> Post processing" % torch.log(lag_const), flush=True)
                 self.post_process(1e-1)
-                _, S, _ = torch.svd(self.A)
+                _, S, _ = torch.svd(self.A ** 2)
                 S = S.abs()
                 sigma_max = S.max().item()
                 sigma_max = 1 if sigma_max <= 0 else sigma_max
@@ -200,7 +203,7 @@ class DAGConditioner(Conditioner):
                     self.s_thresh = True
                     self.h_thresh = 0.
                     self.A *= 2
-                    _, S, _ = torch.svd(self.A)
+                    _, S, _ = torch.svd(self.A ** 2)
                     S = S.abs()
                     sigma_max = S.max().item()
                     self.alpha = torch.tensor(1. / sigma_max) ** 2
