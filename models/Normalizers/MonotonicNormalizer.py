@@ -37,7 +37,6 @@ class IntegrandNet(nn.Module):
         y = self.net(x_he).view(nb_batch, -1)
         return y
 
-# TODO Add hot encoding x
 
 class MonotonicNormalizer(Normalizer):
     def __init__(self, integrand_net, cond_size, nb_steps=20, solver="CC"):

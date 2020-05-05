@@ -44,7 +44,7 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
                               hot_encoding=False, prior_kernel=None):
     if len(nb_inner_steps) == 3:
         img_sizes = [[1, 28, 28], [1, 14, 14], [1, 7, 7]]
-        dropping_factors = [[1, 2, 2], [1, 2, 2]]
+        dropping_factors = [[1, 2, 2], [1, 2, 2], [1, 1, 1]]
         fc_l = [[2304, 128], [400, 64], [16, 16]]
 
         outter_steps = []
@@ -80,7 +80,6 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
                                   hot_encoding=hot_encoding, A_prior=A_prior)
             if normalizer_type is MonotonicNormalizer:
                 emb_s = 30 + 28*28 if hot_encoding else 30
-                print(emb_s)
                 norm = normalizer_type(**normalizer_args, cond_size=emb_s)
             else:
                 norm = normalizer_type(**normalizer_args)

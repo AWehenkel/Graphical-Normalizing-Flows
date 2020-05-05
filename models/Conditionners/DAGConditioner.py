@@ -27,7 +27,7 @@ class DAGConditioner(Conditioner):
         if A_prior is None:
             self.A = nn.Parameter(torch.ones(in_size, in_size) * 1.5 + torch.randn((in_size, in_size)) * .02)
         else:
-            self.A = nn.Parameter(A_prior) * 1.5 + torch.randn((in_size, in_size)) * .5
+            self.A = nn.Parameter(A_prior * 1.5 + torch.randn((in_size, in_size)) * .5)
         self.in_size = in_size
         self.s_thresh = soft_thresholding
         self.h_thresh = h_thresh
@@ -111,7 +111,6 @@ class DAGConditioner(Conditioner):
         return self.A**2 * (self.A**2 > self.h_thresh).float()
 
     def forward(self, x, context=None):
-        print(self.get_power_trace())
         if self.h_thresh > 0:
             if self.stoch_gate:
                 e = (x.unsqueeze(1).expand(-1, self.in_size, -1) * self.stochastic_gate(self.hard_thresholded_A().unsqueeze(0)

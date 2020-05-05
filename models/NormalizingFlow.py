@@ -145,10 +145,11 @@ class CNNormalizingFlow(FCNormalizingFlow):
             c, h, w = int(C/d_c), int(H/d_h), int(W/d_w)
             z_reshaped = z.view(-1, C, H, W).unfold(1, d_c, d_c).unfold(2, d_h, d_h) \
                     .unfold(3, d_w, d_w).contiguous().view(b_size, c, h, w, -1)
-            z_all += [z_reshaped[:, :, :, 1:].contiguous().view(b_size, -1)]
+            z_all += [z_reshaped[:, :, :, :, 1:].contiguous().view(b_size, -1)]
             x = z.view(-1, C, H, W).unfold(1, d_c, d_c).unfold(2, d_h, d_h) \
                     .unfold(3, d_w, d_w).contiguous().view(b_size, c, h, w, -1)[:, :, :, :, 0] \
                 .contiguous().view(b_size, -1)
             jac_tot += jac
+        z_all += [x]
         z = torch.cat(z_all, 1)
         return z, jac_tot
