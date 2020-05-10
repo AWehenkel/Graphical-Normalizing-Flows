@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from .Conditioner import Conditioner
-from models.MLP import IdentityNN
+import networkx as nx
 
 
 class DAGMLP(nn.Module):
@@ -27,7 +27,7 @@ class DAGConditioner(Conditioner):
         if A_prior is None:
             self.A = nn.Parameter(torch.ones(in_size, in_size) * 1.5 + torch.randn((in_size, in_size)) * .02)
         else:
-            self.A = nn.Parameter(A_prior * 1.5 + torch.randn((in_size, in_size)) * .5)
+            self.A = nn.Parameter(A_prior)
         self.in_size = in_size
         self.s_thresh = soft_thresholding
         self.h_thresh = h_thresh
@@ -52,18 +52,19 @@ class DAGConditioner(Conditioner):
         self.register_buffer("lambd", torch.tensor(.0))
         self.register_buffer("l1_weight", torch.tensor(l1))
         self.register_buffer("dag_const", torch.tensor(1.))
+        #self.register_buffer("alpha_factor", torch.tensor(1.))
+        self.alpha_factor = 1.
         self.d = in_size
         self.tol = 1e-20
-        _, S, _ = torch.svd(self.A**2)
-        S = S.abs()
-        sigma_max = S.max().item()
-        #print(sigma_max)
-        self.register_buffer("alpha", torch.tensor(1. / sigma_max) ** 2)
+        self.register_buffer("alpha", torch.tensor(self.getAlpha()))
         self.register_buffer("prev_trace", self.get_power_trace())
-        #print(self.prev_trace)
         self.nb_epoch_update = nb_epoch_update
         self.no_update = 0
-        #exit()
+
+    def getAlpha(self):
+        _, S, _ = torch.svd(self.A**2, compute_uv=False)
+        alpha = 1/(torch.max(S) * self.in_size)
+        return alpha
 
     def get_dag(self):
         return self
@@ -155,7 +156,9 @@ class DAGConditioner(Conditioner):
         return
 
     def get_power_trace(self):
-        alpha = min(1, self.alpha)
+        alpha = min(1., self.alpha)
+        alpha *= self.alpha_factor
+        print(alpha)
         if self.hutchinson != 0:
             h_iter = self.hutchinson
             trace = 0.
@@ -186,11 +189,7 @@ class DAGConditioner(Conditioner):
             elif self.dag_const > 0.:
                 print("DAGness is very low: %f -> Post processing" % torch.log(lag_const), flush=True)
                 self.post_process(1e-1)
-                _, S, _ = torch.svd(self.A ** 2)
-                S = S.abs()
-                sigma_max = S.max().item()
-                sigma_max = 1 if sigma_max <= 0 else sigma_max
-                self.alpha = torch.tensor(1. / sigma_max) ** 2
+                self.alpha = torch.tensor(self.getAlpha())
                 dag_const = self.get_power_trace()
                 print("DAGness is still very low: %f" % torch.log(dag_const), flush=True)
                 if dag_const > 0.:
@@ -202,10 +201,7 @@ class DAGConditioner(Conditioner):
                     self.s_thresh = True
                     self.h_thresh = 0.
                     self.A *= 2
-                    _, S, _ = torch.svd(self.A ** 2)
-                    S = S.abs()
-                    sigma_max = S.max().item()
-                    self.alpha = torch.tensor(1. / sigma_max) ** 2
+                    self.alpha = torch.tensor(self.getAlpha())
                     self.prev_trace = self.get_power_trace()
                 else:
                     self.dag_const = torch.tensor(0.)
@@ -215,6 +211,23 @@ class DAGConditioner(Conditioner):
                           (int(self.A.sum().item()), ((self.d - 1)*self.d)/2), flush=True)
 
             else:
+                G = nx.from_numpy_matrix(self.A.detach().cpu().numpy(), create_using=nx.DiGraph)
+                try:
+                    nx.find_cycle(G)
+                    print("Bad news there is still cycles in this graph.", flush=True)
+                    self.A.requires_grad = True
+                    self.A.grad = self.A * 0
+                    self.stoch_gate = True
+                    self.noise_gate = False
+                    self.s_thresh = True
+                    self.h_thresh = 0.
+                    self.A *= 2
+                    self.alpha = torch.tensor(self.getAlpha())
+                    self.prev_trace = self.get_power_trace()
+                    while self.prev_trace == 0.:
+                        self.alpha_factor *= 10
+                except:
+                    print("Good news there is no cycle in this graph.", flush=True)
                 print("DAGness is still very low: %f" % torch.log(self.get_power_trace()), flush=True)
         return lag_const
 

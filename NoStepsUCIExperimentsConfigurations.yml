@@ -1,0 +1,94 @@
+
+
+
+power-affine-coupling:
+  dataset: 'power'
+  b_size: 2500
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [60, 60, 60, 2]
+  normalizer: 'affine'
+
+
+power-affine-autoregressive:
+  dataset: 'power'
+  b_size: 2500
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [60, 60, 60, 2]
+  normalizer: 'affine'
+
+
+gas-affine-coupling:
+  dataset: 'gas'
+  b_size: 10000
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [80, 80, 80, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-3
+
+
+
+gas-affine-autoregressive:
+  dataset: 'gas'
+  b_size: 10000
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [80, 80, 80, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-3
+
+hepmass-affine-coupling:
+  dataset: 'hepmass'
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [210, 210, 210, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-4
+
+hepmass-affine-autoregressive:
+  dataset: 'hepmass'
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [210, 210, 210, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-4
+
+miniboone-affine-coupling:
+  dataset: 'miniboone'
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [430, 430, 430, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-2
+
+miniboone-affine-autoregressive:
+  dataset: 'miniboone'
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [430, 430, 430, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-2
+
+bsds300-affine-coupling:
+  dataset: 'bsds300'
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Coupling'
+  emb_net: [630, 630, 630, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-4
+
+bsds300-affine-autoregressive:
+  dataset: 'bsds300'
+  b_size: 100
+  nb_epoch: 10000
+  conditioner: 'Autoregressive'
+  emb_net: [630, 630, 630, 30]
+  normalizer: 'affine'
+  weight_decay: 1e-4

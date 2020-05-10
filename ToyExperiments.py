@@ -11,6 +11,8 @@ import numpy as np
 import math
 import matplotlib
 
+cond_types = {"DAG": DAGConditioner, "Coupling": CouplingConditioner, "Autoregressive": AutoregressiveConditioner}
+norm_types = {"Affine": AffineNormalizer, "Monotonic": MonotonicNormalizer}
 
 def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=10):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
@@ -26,33 +28,28 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    linear_net = True
-    nb_flow = 1
-    emb_net = [100, 100, 100, 100, 100, 2]
-    emb_nets = []
-    for i in range(nb_flow):
-        if emb_net is not None:
-            step = MLP(dim, hidden=emb_net[:-1], out_d=emb_net[-1], device=device)
-        else:
-            step = None
-        emb_nets.append(step)
+    nb_flow = 4
+    cond_type = "Coupling"
+    emb_net = [50, 50, 50]
+    norm_type = "Affine"
+    solver = "CCParallel"
+    int_net = [50, 50, 50]
 
-    model = DAGNF(nb_flow=nb_flow, in_d=dim, hidden_integrand=[50, 50, 50], emb_d=emb_nets[0].out_d, emb_nets=emb_nets,
-                  l1_weight=l1, nb_steps=nb_steps, linear_normalizer=linear_net)
-    model.dag_const = 0.
+    conditioner_type = cond_types[cond_type]
+    conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1]}
+    if conditioner_type is DAGConditioner:
+        conditioner_args['l1'] = l1
+        conditioner_args['gumble_T'] = .5
+        conditioner_args['nb_epoch_update'] = nb_step_dual
+        conditioner_args["hot_encoding"] = True
+    normalizer_type = norm_types[norm_type]
+    if normalizer_type is MonotonicNormalizer:
+        normalizer_args = {"integrand_net": int_net, "cond_size": emb_net[-1], "nb_steps": nb_steps,
+                           "solver": solver}
+    else:
+        normalizer_args = {}
 
-    conditioner_type = DAGConditioner
-    conditioner_args = {"in_size": dim, "hidden": [200, 200, 200, 200], "out_size": 10, "gumble_T": 1., "hot_encoding": True,
-                        "nb_epoch_update": nb_step_dual}
-    #conditioner_type = CouplingConditioner
-    #conditioner_args = {"in_size": dim, "hidden": [50, 50, 50], "out_size": 2}
-    normalizer_type = MonotonicNormalizer
-    normalizer_args = {"integrand_net": [50, 50, 50], "cond_size": 10, "nb_steps": 10, "solver": "CCParallel"}
-    #normalizer_type = AffineNormalizer
-    #normalizer_args = {}
-    model = buildFCNormalizingFlow(1, conditioner_type, conditioner_args, normalizer_type, normalizer_args)
-    print(model)
-    #exit()
+    model = buildFCNormalizingFlow(nb_flow, conditioner_type, conditioner_args, normalizer_type, normalizer_args)
 
     opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
 
@@ -90,8 +87,9 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
 
         end = timer()
-        _, ll_test = model(x_test)
-        ll_test = ll_test.mean()
+        z, jac = model(x_test)
+        ll = (model.z_log_density(z) + jac)
+        ll_test = -ll.mean()
         dagness = max(model.DAGness())
         logger.info("epoch: {:d} - Train loss: {:4f} - Test loss: {:4f} - <<DAGness>>: {:4f} - Elapsed time per epoch {:4f} (seconds)".
                     format(epoch, loss_tot.item(), ll_test.item(), dagness, end-start))
@@ -108,8 +106,9 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
                 for threshold in [.95, .1, .01, .0001, 1e-8]:
                     model.set_h_threshold(threshold)
                     # Valid loop
-                    ll_test, _ = model.compute_ll(x_test)
-                    ll_test = -ll_test.mean().item()
+                    z, jac = model(x_test)
+                    ll = (model.z_log_density(z) + jac)
+                    ll_test = -ll.mean().item()
                     dagness = max(model.DAGness()).item()
                     logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
                                 format(epoch, threshold, ll_test, dagness))
@@ -120,28 +119,22 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
 
         if epoch % 500 == 0:
-            if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians", "2gaussians", "2igaussians", "8gaussians"]:
-                def compute_ll_2spirals(x):
-                    if toy in ["2gaussians", "8gaussians", "2igaussians"]:
-                        z, ll = model(x.to(device))
-                        return ll, z
-                    return model.compute_ll(torch.cat((x, torch.zeros(x.shape[0], dim-2).to(device)), 1))
-                def compute_ll_8gaussians(x):
-                    if toy in ["2gaussians", "8gaussians", "2igaussians"]:
-                        z, ll = model(x.to(device))
-                        return ll, z
-                    return model.compute_ll(torch.cat((torch.zeros(x.shape[0], dim-2).to(device), x), 1))
+            if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians", "2gaussians",
+                       "4gaussians", "2igaussians", "8gaussians"]:
+                def compute_ll(x):
+                    z, jac = model(x)
+                    ll = (model.z_log_density(z) + jac)
+                    return ll, z
                 with torch.no_grad():
                     npts = 100
                     plt.figure(figsize=(30, 10))
                     ax = plt.subplot(1, 3, 1, aspect="equal")
-                    qz_1, qz_2 = vf.plt_flow(compute_ll_2spirals, ax, npts=npts, device=device)
+                    qz_1, qz_2 = vf.plt_flow(compute_ll, ax, npts=npts, device=device)
                     plt.subplot(1, 3, 2)
                     plt.plot(np.linspace(-4, 4, npts), qz_1)
                     plt.subplot(1, 3, 3)
                     plt.plot(np.linspace(-4, 4, npts), qz_2)
-                    flow_type = "linear" if linear_net else "monotonic"
-                    plt.savefig("%s%s/flow_%s_%d_%d.pdf" % (folder, toy, flow_type, nb_flow, epoch))
+                    plt.savefig("%s%s/flow_%s_%d_%d.pdf" % (folder, toy, cond_type+norm_type, nb_flow, epoch))
 
             # Plot DAG
             font = {'family': 'normal',
@@ -192,7 +185,7 @@ toy = "8gaussians"
 import argparse
 datasets = ["2igaussians", "2gaussians", "8gaussians", "swissroll", "moons", "pinwheel", "cos", "2spirals", "checkerboard", "line", "line-noisy",
             "circles", "joint_gaussian", "2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians",
-            "8-MIX", "7-MIX"]
+            "8-MIX", "7-MIX", "4gaussians"]
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy problem ?")

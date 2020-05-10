@@ -114,6 +114,23 @@ def inf_train_gen(data, rng=None, batch_size=200):
         #dataset /= 1.414
         return dataset
 
+    elif data == "4gaussians":
+        scale = 4.
+        centers = [(.5, -.5), (-.5, .5), (.5, .5), (-.5, -.5)]
+        centers = [(scale * x, scale * y) for x, y in centers]
+
+        dataset = []
+        for i in range(batch_size):
+            point = rng.randn(2) * .75
+            idx = rng.randint(4)
+            center = centers[idx]
+            point[0] += center[0]
+            point[1] += center[1]
+            dataset.append(point)
+        dataset = np.array(dataset, dtype="float32")
+        # dataset /= 1.414
+        return dataset
+
     elif data == "2igaussians":
         scale = 4.
         centers = [(.5, 0.), (-.5, .0)]

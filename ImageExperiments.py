@@ -138,6 +138,19 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     logger.info("...Model built.")
     logger.info("Training starts:")
 
+    if load:
+        for conditioner in model.module.getConditioners():
+        #    A = (conditioner.soft_thresholded_A() > .1).float()
+
+        #    G = nx.from_numpy_matrix(A.detach().numpy(), create_using=nx.DiGraph)
+            conditioner.alpha = conditioner.getAlpha()#/1000000
+        #    print(nx.find_cycle(G))
+        #    print(conditioner.get_power_trace())
+            #plt.matshow(A.detach().numpy())
+            #plt.colorbar()
+            #plt.show()
+        #exit()
+
     # ----------------------- Main Loop ------------------------- #
     for epoch in range(nb_epoch):
         ll_tot = 0
@@ -169,8 +182,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
             ll_tot /= (batch_idx + 1)
             torch.cuda.empty_cache()
-            if epoch > 0:
-                model.module.step(epoch, ll_tot)
+            model.module.step(epoch, ll_tot)
 
         else:
             ll_tot = 0.
@@ -225,8 +237,13 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     dagness = max(model.module.DAGness())
                     logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f}".
                         format(epoch, threshold, ll_test, bpp_test, dagness))
+                for i, conditioner in enumerate(model.module.getConditioners()):
+                    conditioner.h_thresh = 0.
+                    conditioner.stoch_gate = stoch_gate[i]
+                    conditioner.noise_gate = noise_gate[i]
+                    conditioner.s_thresh = s_thresh[i]
 
-                if dagness < 1e-20 and -ll_test < best_valid_loss:
+                if dagness == 0 and -ll_test < best_valid_loss:
                     logger.info("------- New best validation loss with threshold %f --------" % threshold)
                     torch.save(model.state_dict(), path + '/best_model.pt')
                     best_valid_loss = -ll_test
@@ -240,13 +257,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
                     ll_test /= batch_idx + 1
                     bpp_test /= batch_idx + 1
-                    logger.info("epoch: {:d} - Threshold: {:4f} - Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".
-                                format(epoch, threshold, ll_test, bpp_test, dagness))
-                for i, conditioner in enumerate(model.module.getConditioners()):
-                    conditioner.h_thresh = 0.
-                    conditioner.stoch_gate = stoch_gate[i]
-                    conditioner.noise_gate = noise_gate[i]
-                    conditioner.s_thresh = s_thresh[i]
+                    logger.info("epoch: {:d} - Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".
+                                format(epoch, ll_test, bpp_test, dagness))
 
                 in_s = 784 if dataset == "MNIST" else 3*32*32
                 a_tmp = model.module.getConditioners()[0].soft_thresholded_A()[0, :]
@@ -273,8 +285,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
                 ani.save(path + '/A_epoch_%d.mp4' % epoch, writer=writer)
 
-                deg_in = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(0).cpu().numpy()
-                deg_out = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(1).cpu().numpy()
+                deg_out = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(0).cpu().numpy()
+                deg_in = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(1).cpu().numpy()
                 fig, ax = plt.subplots(1, 2, figsize=(12, 6))
                 if dataset == "MNIST":
                     shape = (28, 28)
