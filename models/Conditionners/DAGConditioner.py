@@ -62,8 +62,9 @@ class DAGConditioner(Conditioner):
         self.no_update = 0
 
     def getAlpha(self):
-        _, S, _ = torch.svd(self.A**2, compute_uv=False)
-        alpha = 1/(torch.max(S) * self.in_size)
+        with torch.no_grad():
+            _, S, _ = torch.svd(self.A**2, compute_uv=False)
+            alpha = 1/(torch.max(S) * self.in_size)
         return alpha
 
     def get_dag(self):
