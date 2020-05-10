@@ -227,6 +227,7 @@ class DAGConditioner(Conditioner):
                     self.prev_trace = self.get_power_trace()
                     while self.prev_trace == 0.:
                         self.alpha_factor *= 10
+                        self.prev_trace = self.get_power_trace()
                 except:
                     print("Good news there is no cycle in this graph.", flush=True)
                 print("DAGness is still very low: %f" % torch.log(self.get_power_trace()), flush=True)
