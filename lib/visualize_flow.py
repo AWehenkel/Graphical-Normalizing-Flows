@@ -54,17 +54,17 @@ def plt_flow(transform, ax, npts=50, title="$q(x)$", device="cpu"):
     qz_1 = qz.sum(1)
     qz_2 = qz.sum(0)
 
-    pcol = plt.pcolormesh(xx, yy, qz, linewidth=0, rasterized=True)
+    pcol = plt.pcolormesh(xx, yy, qz, linewidth=0, rasterized=True, cmap="BuPu")
     pcol.set_edgecolor('face')
     ax.set_xlim(-4.5, 4.5)
     ax.set_ylim(-4.5, 4.5)
     cmap = matplotlib.cm.get_cmap(None)
     ax.set_facecolor(cmap(0.))
     #ax.invert_yaxis()
-    plt.xlabel('$x_1$')
-    plt.ylabel('$x_2$')
-    ax.get_xaxis().set_ticks([-4, 0, 4])
-    ax.get_yaxis().set_ticks([-4, 0, 4])
+    #plt.xlabel('$x_1$')
+    #plt.ylabel('$x_2$')
+    ax.get_xaxis().set_ticks([])#[-4, 0, 4])
+    ax.get_yaxis().set_ticks([])#[-4, 0, 4])
 
     #ax.set_title(title)
     return qz_1, qz_2

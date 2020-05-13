@@ -10,11 +10,17 @@ import networkx as nx
 import numpy as np
 import math
 import matplotlib
+import seaborn as sns
+sns.set()
+from matplotlib import gridspec
+flatui = ["#9b59b6", "#3498db", "#95a5a6", "#e74c3c", "#34495e", "#2ecc71"]
+sns.palplot(sns.color_palette(flatui))
 
 cond_types = {"DAG": DAGConditioner, "Coupling": CouplingConditioner, "Autoregressive": AutoregressiveConditioner}
 norm_types = {"Affine": AffineNormalizer, "Monotonic": MonotonicNormalizer}
 
-def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., nb_epoch=50000, pre_heating_epochs=10):
+def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., nb_epoch=20000, pre_heating_epochs=10,
+              nb_flow=3, cond_type = "Coupling", emb_net = [150, 150, 150]):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -28,10 +34,9 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    nb_flow = 4
-    cond_type = "Coupling"
-    emb_net = [50, 50, 50]
+
     norm_type = "Affine"
+    save_name = norm_type + str(emb_net) + str(nb_flow)
     solver = "CCParallel"
     int_net = [50, 50, 50]
 
@@ -51,7 +56,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
     model = buildFCNormalizingFlow(nb_flow, conditioner_type, conditioner_args, normalizer_type, normalizer_args)
 
-    opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
+    opt = torch.optim.Adam(model.parameters(), 1e-4, weight_decay=1e-5)
 
     if load:
         logger.info("Loading model...")
@@ -119,66 +124,35 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
 
         if epoch % 500 == 0:
+            font = {'family': 'normal',
+                    'weight': 'normal',
+                    'size': 25}
+
+            matplotlib.rc('font', **font)
             if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians", "2gaussians",
-                       "4gaussians", "2igaussians", "8gaussians"]:
+                       "4gaussians", "2igaussians", "8gaussians"] or True:
                 def compute_ll(x):
                     z, jac = model(x)
                     ll = (model.z_log_density(z) + jac)
                     return ll, z
                 with torch.no_grad():
                     npts = 100
-                    plt.figure(figsize=(30, 10))
-                    ax = plt.subplot(1, 3, 1, aspect="equal")
+                    plt.figure(figsize=(12, 12))
+                    gs = gridspec.GridSpec(2, 2, width_ratios=[3, 1], height_ratios=[3, 1])
+                    ax = plt.subplot(gs[0])
                     qz_1, qz_2 = vf.plt_flow(compute_ll, ax, npts=npts, device=device)
-                    plt.subplot(1, 3, 2)
-                    plt.plot(np.linspace(-4, 4, npts), qz_1)
-                    plt.subplot(1, 3, 3)
+                    plt.subplot(gs[1])
+                    plt.plot(qz_1, np.linspace(-4, 4, npts))
+                    plt.ylabel('$x_2$', fontsize=25, rotation=-90, labelpad=20)
+
+                    plt.xticks([])
+                    plt.subplot(gs[2])
                     plt.plot(np.linspace(-4, 4, npts), qz_2)
-                    plt.savefig("%s%s/flow_%s_%d_%d.pdf" % (folder, toy, cond_type+norm_type, nb_flow, epoch))
-
-            # Plot DAG
-            font = {'family': 'normal',
-                    'weight': 'bold',
-                    'size': 12}
-
-            matplotlib.rc('font', **font)
-            if False:
-                for step in model.step:
-                    A_normal = step.getDag().soft_thresholded_A().detach().cpu().numpy().T
-                    print(A_normal)
-                    #logger.info(str(A_normal))
-                    A_thresholded = A_normal * (A_normal > .001)
-                    j = 0
-                    for A, name in zip([A_normal, A_thresholded], ["normal", "thresholded"]):
-                        #A /= A.sum() / np.log(dim)
-
-                        ax = plt.subplot(2, 2, 1 + j)
-                        plt.title(name + " DAG")
-                        G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-                        pos = nx.layout.spring_layout(G)
-                        nx.draw_networkx_nodes(G, pos, node_size=200, node_color='blue', alpha=.7)
-                        if nx.get_edge_attributes(G, 'weight').items() is not None:
-                            edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-                        nx.draw_networkx_edges(G, pos, node_size=200, arrowstyle='->',
-                                                       arrowsize=3, connectionstyle='arc3,rad=0.2',
-                                                       edge_cmap=plt.cm.Blues, width=5*weights)
-                        labels = {}
-                        for i in range(dim):
-                            labels[i] = str(r'$%d$' % i)
-                        nx.draw_networkx_labels(G, pos, labels, font_size=12)
-
-                        ax = plt.subplot(2, 2, 2 + j)
-                        out = ax.matshow(np.log(A))
-                        plt.colorbar(out, ax=ax)
-                        j += 2
-
-                    #vf.plt_flow(model.compute_ll, ax)
-                    #plt.savefig("%s%s/DAG_%d.pdf" % (folder, toy, epoch))
-                    torch.save(model.state_dict(), folder + toy + '/model.pt')
-                    torch.save(opt.state_dict(), folder + toy + '/ADAM.pt')
-                    G.clear()
-                    plt.clf()
-
+                    plt.xlabel('$x_1$', fontsize=25)
+                    plt.yticks([])
+                    plt.savefig("%s%s/flow_%s_%d.pdf" % (folder, toy, save_name, epoch))
+                    torch.save(model.state_dict(), folder + toy + '/' + save_name + 'model.pt')
+                    torch.save(opt.state_dict(), folder + toy + '/'+ save_name + 'ADAM.pt')
 
 toy = "8gaussians"
 
@@ -197,6 +171,12 @@ parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs
 
 args = parser.parse_args()
 
+for d in ["checkerboard", "2spirals", "pinwheel"]:
+    for net in [[10], [20, 20], [40, 40, 40], [100, 100, 100]]:
+        for nb_flow in [1, 2, 3, 4, 5, 10]:
+            if not (os.path.isdir(args.folder + d)):
+                os.makedirs(args.folder + d)
+            train_toy(d, load=False, nb_epoch=5000, nb_flow=nb_flow, cond_type="Coupling", emb_net=net)
 
 if args.dataset is None:
     toys = datasets
