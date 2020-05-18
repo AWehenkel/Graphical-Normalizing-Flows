@@ -17,6 +17,7 @@ import torchvision.datasets as dset
 import torchvision.transforms as tforms
 import matplotlib.animation as animation
 import matplotlib
+import torchvision
 
 def add_noise(x):
     """
@@ -55,6 +56,36 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
         train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
+    elif len(dataset) == 6 and dataset[:5] == 'MNIST':
+        data = datasets.MNIST('./MNIST', train=True, download=True,
+                              transform=transforms.Compose([
+                                  AddUniformNoise(),
+                                  ToTensor()
+                              ]))
+        label = int(dataset[5])
+        idx = data.train_labels == label
+        data.targets = data.train_labels[idx]
+        data.data = data.train_data[idx]
+
+        train_data, valid_data = torch.utils.data.random_split(data, [5000, idx.sum() - 5000])
+
+        test_data = datasets.MNIST('./MNIST', train=False, download=True,
+                                   transform=transforms.Compose([
+                                       AddUniformNoise(),
+                                       ToTensor()
+                                   ]))
+        idx = test_data.test_labels == label
+        test_data.targets = test_data.test_labels[idx]
+        test_data.data = test_data.test_data[idx]
+
+        kwargs = {'num_workers': 0, 'pin_memory': True} if cuda > -1 else {}
+
+        train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True,
+                                                   **kwargs)
+        valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=batch_size, shuffle=True, drop_last=True,
+                                                   **kwargs)
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, drop_last=True,
+                                                  **kwargs)
     elif dataset == "CIFAR10":
         im_dim = 3
         im_size = 32  # if args.imagesize is None else args.imagesize
@@ -93,6 +124,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
     logger.info("Loading data...")
     train_loader, valid_loader, test_loader = load_data(dataset, batch_size)
+    if len(dataset) == 6 and dataset[:5] == 'MNIST':
+        dataset = "MNIST"
     alpha = 1e-6 if dataset == "MNIST" else .05
 
     logger.info("Data loaded.")
@@ -243,6 +276,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     conditioner.noise_gate = noise_gate[i]
                     conditioner.s_thresh = s_thresh[i]
 
+
                 if dagness == 0 and -ll_test < best_valid_loss:
                     logger.info("------- New best validation loss with threshold %f --------" % threshold)
                     torch.save(model.state_dict(), path + '/best_model.pt')
@@ -300,6 +334,12 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 fig.colorbar(res1, ax=ax[1])
                 plt.savefig(path + '/A_degrees_epoch_%d.png' % epoch)
 
+                if dagness == 0:
+                    x = model.module.invert(torch.randn(10, in_s))
+                    grid_img = torchvision.utils.make_grid(x, nrow=5)
+                    torchvision.utils.save_image(grid_img)
+
+
         if epoch % nb_step_dual == 0:
             logger.info("Saving model N°%d" % epoch)
             torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
@@ -330,7 +370,7 @@ parser.add_argument("-weight_decay", default=1e-5, type=float, help="Weight deca
 parser.add_argument("-learning_rate", default=1e-3, type=float, help="Weight decay value")
 parser.add_argument("-batch_per_optim_step", default=1, type=int, help="Number of batch to accumulate")
 parser.add_argument("-nb_gpus", default=1, type=int, help="Number of gpus to train on")
-parser.add_argument("-dataset", default="MNIST", type=str, choices=["MNIST", "CIFAR10"])
+parser.add_argument("-dataset", default="MNIST", type=str, choices=["MNIST", "CIFAR10", "MNIST1"])
 parser.add_argument("-normalizer", default="Affine", type=str, choices=["Affine", "Monotonic"])
 parser.add_argument("-no_hot_encoding", default=False, action="store_true")
 parser.add_argument("-prior_A_kernel", default=None, type=int)

@@ -60,9 +60,9 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
     if load:
         logger.info("Loading model...")
-        model.load_state_dict(torch.load(toy + '/model.pt'))
+        model.load_state_dict(torch.load(folder + toy + '/' + save_name + 'model.pt'))
         model.train()
-        opt.load_state_dict(torch.load(toy + '/ADAM.pt'))
+        opt.load_state_dict(torch.load(folder + toy + '/' + save_name + 'ADAM.pt'))
         logger.info("Model loaded.")
 
     if True:
@@ -176,7 +176,7 @@ for d in ["checkerboard", "2spirals", "pinwheel"]:
         for nb_flow in [1, 2, 3, 4, 5, 10]:
             if not (os.path.isdir(args.folder + d)):
                 os.makedirs(args.folder + d)
-            train_toy(d, load=False, nb_epoch=5000, nb_flow=nb_flow, cond_type="Coupling", emb_net=net)
+            train_toy(d, load=True, nb_epoch=5000, nb_flow=nb_flow, cond_type="Coupling", emb_net=net)
 
 if args.dataset is None:
     toys = datasets

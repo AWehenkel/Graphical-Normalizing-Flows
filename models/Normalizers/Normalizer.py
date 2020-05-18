@@ -15,3 +15,14 @@ class Normalizer(nn.Module):
     '''
     def forward(self, x, h, context=None):
         pass
+
+
+    '''
+    inverse_transform(self, z, h, context=None):
+    :param z: A tensor [B, d]
+    :param h: A tensor [B, d, h]
+    :param context: A tensor [B, c]
+    :return x: [B, d] the x that would generate z given the embedding and context.
+    '''
+    def inverse_transform(self, z, h, context=None):
+        pass

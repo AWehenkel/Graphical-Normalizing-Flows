@@ -34,3 +34,6 @@ class CouplingConditioner(Conditioner):
         h1 = self.constants.unsqueeze(0).expand(x.shape[0], -1, -1)
         h2 = self.embeding_net(x[:, :self.indep_size]).view(x.shape[0], self.cond_size, self.out_size)
         return torch.cat((h1, h2), 1)
+
+    def depth(self):
+        return 1

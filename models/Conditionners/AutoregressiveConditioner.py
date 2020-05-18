@@ -144,7 +144,11 @@ class ConditionnalMADE(MADE):
 class AutoregressiveConditioner(Conditioner):
     def __init__(self, in_size, hidden, out_size, cond_in=0):
         super(AutoregressiveConditioner, self).__init__()
+        self.in_size = in_size
         self.masked_autoregressive_net = ConditionnalMADE(in_size, cond_in=cond_in, hidden_sizes=hidden, nout=out_size*in_size)
 
     def forward(self, x, context=None):
         return self.masked_autoregressive_net(x, context)
+
+    def depth(self):
+        return self.in_size - 1

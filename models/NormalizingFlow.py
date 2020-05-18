@@ -45,6 +45,12 @@ class NormalizingFlow(nn.Module):
     def getNormalizers(self):
         pass
 
+    '''
+    Return the x that would generate z: [B, d] tensor.
+    '''
+    def invert(self, z, context=None):
+        pass
+
 
 class NormalizingFlowStep(NormalizingFlow):
     def __init__(self, conditioner: Conditioner, normalizer: Normalizer):
@@ -76,6 +82,13 @@ class NormalizingFlowStep(NormalizingFlow):
 
     def getNormalizers(self):
         return [self.normalizer]
+
+    def invert(self, z, context=None):
+        x = torch.zeros_like(z)
+        for i in range(self.conditioner.depth() + 1):
+            h = self.conditioner(x, context)
+            x = self.normalizer.inverse_transform(z, h, context)
+        return x
 
 
 class FCNormalizingFlow(NormalizingFlow):
@@ -128,6 +141,11 @@ class FCNormalizingFlow(NormalizingFlow):
             conditioners += step.getConditioners()
         return conditioners
 
+    def invert(self, z, context=None):
+        for step in range(len(self.steps)):
+            z = self.steps[-step].inverse(z, context)
+        return z
+
 
 class CNNormalizingFlow(FCNormalizingFlow):
     def __init__(self, steps, z_log_density, dropping_factors):
@@ -153,3 +171,7 @@ class CNNormalizingFlow(FCNormalizingFlow):
         z_all += [x]
         z = torch.cat(z_all, 1)
         return z, jac_tot
+
+    def invert(self, z, context=None):
+        #TODO implement it.
+        return None

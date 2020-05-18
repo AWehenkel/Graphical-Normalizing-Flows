@@ -61,11 +61,13 @@ class DAGConditioner(Conditioner):
         self.register_buffer("prev_trace", self.get_power_trace())
         self.nb_epoch_update = nb_epoch_update
         self.no_update = 0
+        self.is_invertible = False
 
     def getAlpha(self):
         with torch.no_grad():
             _, S, _ = torch.svd(self.A**2, compute_uv=False)
             alpha = 1/(torch.max(S) * self.in_size)
+        alpha = torch.tensor(1./self.in_size)
         return alpha
 
     def get_dag(self):
@@ -181,6 +183,7 @@ class DAGConditioner(Conditioner):
         with torch.no_grad():
             lag_const = self.get_power_trace()
             while self.dag_const > 0. and lag_const < self.tol and self.exponent < self.in_size:
+                print("Update exponent", self.exponent)
                 self.exponent += 50
                 lag_const = self.get_power_trace()
 
@@ -193,7 +196,7 @@ class DAGConditioner(Conditioner):
             elif self.dag_const > 0.:
                 print("DAGness is very low: %f -> Post processing" % torch.log(lag_const), flush=True)
                 A_before = self.A.clone()
-                self.post_process(1e-1)
+                self.post_process(0.3)
                 self.alpha = torch.tensor(self.getAlpha())
                 lag_const = self.get_power_trace()
                 print("DAGness is now: %f" % torch.log(lag_const), flush=True)
@@ -208,13 +211,13 @@ class DAGConditioner(Conditioner):
                     self.A.grad = self.A.clone()
                     self.alpha = torch.tensor(self.getAlpha())
                     self.prev_trace = self.get_power_trace()
-                    self.alpha_factor *= 2 ** (1/self.in_size)
+                    #self.alpha_factor *= 2 ** (1/self.in_size)
                     self.c *= 1/self.eta
                     self.lambd = self.lambd + self.c * lag_const
                     self.dag_const = torch.tensor(1.)
                 else:
                     self.dag_const = torch.tensor(0.)
-                    #self.l1_weight = torch.tensor(0.)
+                    self.l1_weight = torch.tensor(0.)
                     print("Post processing successful.")
                     print("Number of edges is %d VS number max is %d" %
                           (int(self.A.sum().item()), ((self.d - 1)*self.d)/2), flush=True)
@@ -233,17 +236,20 @@ class DAGConditioner(Conditioner):
                     self.alpha = self.getAlpha()
                     self.prev_trace = self.get_power_trace()
                     self.dag_const = torch.tensor(1.)
-                    while self.prev_trace == 0.:
-                        self.alpha_factor *= 2 ** (1 / self.in_size)
-                        self.prev_trace = self.get_power_trace()
-                        self.alpha_factor *= 2 ** (1 / self.in_size)
-                        self.c *= 1 / self.eta
-                        self.lambd = self.lambd + self.c * lag_const
                     print(self.in_size, self.prev_trace)
                 except nx.NetworkXNoCycle:
                     print("Good news there is no cycle in this graph.", flush=True)
+                    print("Depth of the graph is: %d" % self.depth())
+                    self.is_invertible = True
+
                 print("DAGness is still very low: %f" % torch.log(self.get_power_trace()), flush=True)
         return lag_const
+
+    def depth(self):
+        if self.is_invertible:
+            G = nx.from_numpy_matrix(self.A.detach().cpu().numpy() ** 2, create_using=nx.DiGraph)
+            return nx.dag_longest_path_length(G)
+        return 0
 
     def loss(self):
         lag_const = self.get_power_trace()
@@ -252,15 +258,19 @@ class DAGConditioner(Conditioner):
 
     def step(self, epoch_number, loss_avg=0.):
         if self.A.requires_grad:
-            print(self.A.max(), self.A.min(), self.A.mean(), self.A.requires_grad, self.A.grad.mean(),
+            print(self.alpha, self.A.max(), self.A.min(), self.A.mean(), self.A.requires_grad, self.A.grad.mean(),
                   self.A.grad.max(), self.A.grad.min(), self.A.grad.std(), self.getAlpha(), self.dag_const, flush=True)
         else:
             print(self.A.requires_grad, self.getAlpha(), self.dag_const, flush=True)
         with torch.no_grad():
-            if epoch_number % self.nb_epoch_update == 0:
+            lag_const = self.get_power_trace()
+            if lag_const > 50:
+                self.exponent -= 5
+                self.exponent = self.exponent if self.exponent > 3 else 3
+            if epoch_number % self.nb_epoch_update == 0 and epoch_number > 0:
                 if self.in_size < 30:
                     print(self.soft_thresholded_A(), flush=True)
-                if self.loss().abs() < loss_avg.abs()/2 or self.no_update > 2:
+                if self.loss().abs() < loss_avg.abs()/2 or self.no_update > 10:
                     print("Update param", flush=True)
                     self.update_dual_param()
                     self.no_update = 0

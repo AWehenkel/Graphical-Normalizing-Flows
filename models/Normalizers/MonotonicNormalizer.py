@@ -64,3 +64,8 @@ class MonotonicNormalizer(Normalizer):
         else:
             return None
         return z, self.integrand_net(x, h)
+
+
+    def inverse_transform(self, z, h, context=None):
+        #TODO implement inversion strategy
+        return None
