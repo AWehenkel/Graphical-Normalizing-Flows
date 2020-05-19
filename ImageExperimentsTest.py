@@ -1,19 +1,15 @@
 import torch
-from timeit import default_timer as timer
 import lib.utils as utils
 import os
-import matplotlib
 import matplotlib.pyplot as plt
 import networkx as nx
 from torchvision import datasets, transforms
 from lib.transform import AddUniformNoise, ToTensor, HorizontalFlip, Transpose, Resize
 import numpy as np
-import math
 import torch.nn as nn
-from UMNN import UMNNMAFFlow
-from models.NormalizingFlowFactories import buildMNISTNormalizingFlow, buildCIFAR10NormalizingFlow
+from models.NormalizingFlowFactories import buildMNISTNormalizingFlow, buildCIFAR10NormalizingFlow, buildFCNormalizingFlow
 from models.Normalizers import AffineNormalizer, MonotonicNormalizer
-from models.Conditionners import DAGConditioner
+from models.Conditionners import *
 import torchvision.datasets as dset
 import torchvision.transforms as tforms
 import matplotlib.animation as animation
@@ -108,11 +104,12 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
         test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, drop_last=True, shuffle=True, **kwargs)
     return train_loader, valid_loader, test_loader
 
+cond_types = {"DAG": DAGConditioner, "Coupling": CouplingConditioner, "Autoregressive": AutoregressiveConditioner}
 
 def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000, b_size=100,
           int_net=[50, 50, 50], all_args=None, file_number=None, train=True, solver="CC", weight_decay=1e-5,
           learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine', nb_flow=[1], hot_encoding=True,
-          prior_A_kernel=None):
+          prior_A_kernel=None, conditioner="DAG", emb_net=None):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -142,16 +139,24 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
         normalizer_type = MonotonicNormalizer
         normalizer_args = {"integrand_net": int_net, "nb_steps": 15, "solver": solver}
 
-    if dataset == "MNIST":
-        inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
-                                                nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
-                                                prior_kernel=prior_A_kernel)
-    elif dataset == "CIFAR10":
-        inner_model = buildCIFAR10NormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
-                                                  nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding)
+    if conditioner == "DAG":
+        if dataset == "MNIST":
+            inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
+                                                    nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
+                                                    prior_kernel=prior_A_kernel)
+        elif dataset == "CIFAR10":
+            inner_model = buildCIFAR10NormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
+                                                      nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding)
+        else:
+            logger.info("Wrong dataset name. Training aborted.")
+            exit()
     else:
-        logger.info("Wrong dataset name. Training aborted.")
-        exit()
+        dim = 28 ** 2 if dataset == "MNIST" else 32 * 32 * 3
+        conditioner_type = cond_types[conditioner]
+        conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1]}
+
+        inner_model = buildFCNormalizingFlow(nb_flow[0], conditioner_type, conditioner_args, normalizer_type,
+                                             normalizer_args)
     model = nn.DataParallel(inner_model, device_ids=list(range(n_gpu))).to(master_device)
     logger.info(str(model))
     pytorch_total_params = sum(p.numel() for p in model.parameters())
@@ -318,6 +323,9 @@ parser.add_argument("-normalizer", default="Affine", type=str, choices=["Affine"
 parser.add_argument("-no_hot_encoding", default=False, action="store_true")
 parser.add_argument("-prior_A_kernel", default=None, type=int)
 
+parser.add_argument("-conditioner", default='DAG', choices=['DAG', 'Coupling', 'Autoregressive'], type=str)
+parser.add_argument("-emb_net", default=[100, 100, 100, 10], nargs="+", type=int, help="NN layers of embedding")
+
 args = parser.parse_args()
 from datetime import datetime
 now = datetime.now()
@@ -330,4 +338,4 @@ test(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_steps
       nb_steps=args.nb_steps, file_number=args.f_number, norm_type=args.normalizer,
       solver=args.solver, train=not args.test, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
       batch_per_optim_step=args.batch_per_optim_step, n_gpu=args.nb_gpus, hot_encoding=not args.no_hot_encoding,
-      prior_A_kernel=args.prior_A_kernel)
+      prior_A_kernel=args.prior_A_kernel, conditioner=args.conditioner, emb_net=args.emb_net)
