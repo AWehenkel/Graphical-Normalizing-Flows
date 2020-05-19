@@ -67,18 +67,17 @@ class MonotonicNormalizer(Normalizer):
 
 
     def inverse_transform(self, z, h, context=None):
-        #TODO implement inversion strategy
         x_max = torch.ones_like(z) * 20
         x_min = -torch.ones_like(z) * 20
         z_max, _ = self.forward(x_max, h, context)
         z_min, _ = self.forward(x_min, h, context)
-        for i in range(10):
+        for i in range(25):
             x_middle = (x_max + x_min) / 2
             z_middle, _ = self.forward(x_middle, h, context)
             left = (z_middle > z).float()
-            right = (z_middle <= z).float()
+            right = 1 - left
             x_max = left * x_middle + right * x_max
             x_min = right * x_middle + left * x_min
             z_max = left * z_middle + right * z_max
             z_min = right * z_middle + left * z_min
-        return z_middle
+        return (x_max + x_min) / 2

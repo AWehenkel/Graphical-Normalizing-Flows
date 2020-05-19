@@ -189,13 +189,15 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
         with torch.no_grad():
             for normalizer in model.module.getNormalizers():
                 if type(normalizer) is MonotonicNormalizer:
-                    normalizer.nb_steps = 30
+                    normalizer.nb_steps = 20
             for batch_idx, (cur_x, target) in enumerate(valid_loader):
                 cur_x = cur_x.view(batch_size, -1).float().to(master_device)
                 z, jac = model(cur_x)
+                x_inv = model.module.invert(z)
                 ll = (model.module.z_log_density(z) + jac)
                 ll_test += ll.mean().item()
                 bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
+                print(bpp_test/(batch_idx + 1))
         ll_test /= batch_idx + 1
         bpp_test /= batch_idx + 1
 
@@ -281,12 +283,12 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
     plt.savefig(path + '/A_degrees_test.png')
 
     with torch.no_grad():
-        n_images = 9
+        n_images = 16
         for T in [.1, .25, .5, .75, 1.]:
             z = torch.randn(n_images, in_s).to(device=master_device) * T
             x = model.module.invert(z)
             print((z - model(x)[0]).abs().mean())
-            grid_img = torchvision.utils.make_grid(x.view(n_images, 1, 28, 28), nrow=3)
+            grid_img = torchvision.utils.make_grid(x.view(n_images, 1, 28, 28), nrow=4)
             torchvision.utils.save_image(grid_img, path + '/images_test_%f.png' % T)
 
 

@@ -88,7 +88,10 @@ class NormalizingFlowStep(NormalizingFlow):
         for i in range(self.conditioner.depth() + 1):
             print(i, "/", self.conditioner.depth() + 1)
             h = self.conditioner(x, context)
+            x_prev = x
             x = self.normalizer.inverse_transform(z, h, context)
+            if torch.norm(x - x_prev) == 0.:
+                break
         return x
 
 

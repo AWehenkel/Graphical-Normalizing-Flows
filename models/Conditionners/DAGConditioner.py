@@ -256,7 +256,6 @@ class DAGConditioner(Conditioner):
     def depth(self):
         G = nx.from_numpy_matrix((self.A.detach() > 0).float().cpu().numpy(), create_using=nx.DiGraph)
         if self.is_invertible or nx.is_directed_acyclic_graph(G):
-            print(nx.dag_longest_path_length(G))
             return int(nx.dag_longest_path_length(G))
         return 0
 
