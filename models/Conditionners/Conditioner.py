@@ -4,7 +4,8 @@ import torch
 class Conditioner(nn.Module):
     def __init__(self):
         super(Conditioner, self).__init__()
-        self.register_buffer("is_invertible", torch.tensor(False))
+        #self.register_buffer("is_invertible", torch.tensor(True))
+        self.is_invertible = True
 
     '''
     forward(self, x, context=None):

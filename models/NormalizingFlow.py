@@ -86,6 +86,7 @@ class NormalizingFlowStep(NormalizingFlow):
     def invert(self, z, context=None):
         x = torch.zeros_like(z)
         for i in range(self.conditioner.depth() + 1):
+            print(i, "/", self.conditioner.depth() + 1)
             h = self.conditioner(x, context)
             x = self.normalizer.inverse_transform(z, h, context)
         return x
@@ -143,7 +144,7 @@ class FCNormalizingFlow(NormalizingFlow):
 
     def invert(self, z, context=None):
         for step in range(len(self.steps)):
-            z = self.steps[-step].inverse(z, context)
+            z = self.steps[-step].invert(z, context)
         return z
 
 

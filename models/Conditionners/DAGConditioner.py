@@ -61,7 +61,7 @@ class DAGConditioner(Conditioner):
         self.register_buffer("prev_trace", self.get_power_trace())
         self.nb_epoch_update = nb_epoch_update
         self.no_update = 0
-        self.is_invertible = False
+        self.is_invertible = False#torch.tensor(False)
 
     def getAlpha(self):
         with torch.no_grad():
@@ -73,7 +73,15 @@ class DAGConditioner(Conditioner):
     def get_dag(self):
         return self
 
-    def post_process(self, zero_threshold):
+    def post_process(self, zero_threshold=None):
+        if zero_threshold is None:
+            zero_threshold = .1
+            G = nx.from_numpy_matrix((self.soft_thresholded_A().data.clone().abs() > zero_threshold).float().detach().cpu().numpy(), create_using=nx.DiGraph)
+            while not nx.is_directed_acyclic_graph(G):
+                zero_threshold += .05
+                G = nx.from_numpy_matrix(
+                    (self.soft_thresholded_A().data.clone().abs() > zero_threshold).float().detach().cpu().numpy(),
+                    create_using=nx.DiGraph)
         self.stoch_gate = False
         self.noise_gate = False
         self.s_thresh = False
@@ -196,7 +204,7 @@ class DAGConditioner(Conditioner):
             elif self.dag_const > 0.:
                 print("DAGness is very low: %f -> Post processing" % torch.log(lag_const), flush=True)
                 A_before = self.A.clone()
-                self.post_process(0.3)
+                self.post_process()
                 self.alpha = torch.tensor(self.getAlpha())
                 lag_const = self.get_power_trace()
                 print("DAGness is now: %f" % torch.log(lag_const), flush=True)
@@ -240,15 +248,16 @@ class DAGConditioner(Conditioner):
                 except nx.NetworkXNoCycle:
                     print("Good news there is no cycle in this graph.", flush=True)
                     print("Depth of the graph is: %d" % self.depth())
-                    self.is_invertible = True
+                    self.is_invertible = True#torch.tensor(True)
 
                 print("DAGness is still very low: %f" % torch.log(self.get_power_trace()), flush=True)
         return lag_const
 
     def depth(self):
-        if self.is_invertible:
-            G = nx.from_numpy_matrix(self.A.detach().cpu().numpy() ** 2, create_using=nx.DiGraph)
-            return nx.dag_longest_path_length(G)
+        G = nx.from_numpy_matrix((self.A.detach() > 0).float().cpu().numpy(), create_using=nx.DiGraph)
+        if self.is_invertible or nx.is_directed_acyclic_graph(G):
+            print(nx.dag_longest_path_length(G))
+            return int(nx.dag_longest_path_length(G))
         return 0
 
     def loss(self):

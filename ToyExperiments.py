@@ -172,11 +172,11 @@ parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs
 args = parser.parse_args()
 
 for d in ["checkerboard", "2spirals", "pinwheel"]:
-    for net in [[10], [20, 20], [40, 40, 40], [100, 100, 100]]:
+    for net in [[200, 200, 200, 200]]:
         for nb_flow in [1, 2, 3, 4, 5, 10]:
             if not (os.path.isdir(args.folder + d)):
                 os.makedirs(args.folder + d)
-            train_toy(d, load=True, nb_epoch=5000, nb_flow=nb_flow, cond_type="Coupling", emb_net=net)
+            train_toy(d, load=False, nb_epoch=25000, nb_flow=nb_flow, cond_type="Coupling", emb_net=net)
 
 if args.dataset is None:
     toys = datasets

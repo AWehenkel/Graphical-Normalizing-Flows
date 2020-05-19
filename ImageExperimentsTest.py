@@ -13,6 +13,7 @@ import torch.nn as nn
 from UMNN import UMNNMAFFlow
 from models.NormalizingFlowFactories import buildMNISTNormalizingFlow, buildCIFAR10NormalizingFlow
 from models.Normalizers import AffineNormalizer, MonotonicNormalizer
+from models.Conditionners import DAGConditioner
 import torchvision.datasets as dset
 import torchvision.transforms as tforms
 import matplotlib.animation as animation
@@ -108,7 +109,7 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
     return train_loader, valid_loader, test_loader
 
 
-def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000, b_size=100,
+def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000, b_size=100,
           int_net=[50, 50, 50], all_args=None, file_number=None, train=True, solver="CC", weight_decay=1e-5,
           learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine', nb_flow=[1], hot_encoding=True,
           prior_A_kernel=None):
@@ -172,55 +173,16 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     logger.info("Training starts:")
 
     if load:
-        for conditioner in model.module.getConditioners():
-        #    A = (conditioner.soft_thresholded_A() > .1).float()
+        with torch.no_grad():
+            for conditioner in model.module.getConditioners():
+                if type(conditioner) is DAGConditioner:
+                    print(model.module.DAGness())
+                    plt.matshow(conditioner.A.detach().numpy())
+                    plt.savefig(path + "/test.pdf")
+                    conditioner.post_process()
 
-        #    G = nx.from_numpy_matrix(A.detach().numpy(), create_using=nx.DiGraph)
-            conditioner.alpha = conditioner.getAlpha()#/1000000
-        #    print(nx.find_cycle(G))
-        #    print(conditioner.get_power_trace())
-            #plt.matshow(A.detach().numpy())
-            #plt.colorbar()
-            #plt.show()
-        #exit()
-
-    # ----------------------- Main Loop ------------------------- #
-    for epoch in range(nb_epoch):
-        ll_tot = 0
-        start = timer()
-        if train:
-            model.to(master_device)
-            # ----------------------- Training Loop ------------------------- #
-            for batch_idx, (cur_x, target) in enumerate(train_loader):
-                cur_x = cur_x.view(batch_size, -1).float().to(master_device)
-                for normalizer in model.module.getNormalizers():
-                    if type(normalizer) is MonotonicNormalizer:
-                        normalizer.nb_steps = nb_steps + torch.randint(0, 10, [1])[0].item()
-                z, jac = model(cur_x)
-                loss = model.module.loss(z, jac)/(batch_per_optim_step * n_gpu)
-                if math.isnan(loss.item()):
-                    print("Error Nan in loss")
-                    print("Dagness:", model.module.DAGness())
-                    exit()
-                ll_tot += loss.detach()
-                if batch_idx % batch_per_optim_step == 0:
-                    opt.zero_grad()
-
-                loss.backward(retain_graph=True)
-                if (batch_idx + 1) % batch_per_optim_step == 0:
-                    opt.step()
-
-            with torch.no_grad():
-                print("Dagness:", model.module.DAGness())
-
-            ll_tot /= (batch_idx + 1)
-            torch.cuda.empty_cache()
-            model.module.step(epoch, ll_tot)
-
-        else:
-            ll_tot = 0.
-
-        # ----------------------- Valid Loop ------------------------- #
+    # ----------------------- Valid Loop ------------------------- #
+    if False:
         ll_test = 0.
         bpp_test = 0.
         model.to(master_device)
@@ -236,122 +198,97 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
         ll_test /= batch_idx + 1
         bpp_test /= batch_idx + 1
-        end = timer()
 
         dagness = max(model.module.DAGness())
-        logger.info(
-            "epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f} "
-            "- Elapsed time per epoch {:4f} (seconds)".format(epoch, ll_tot, ll_test, bpp_test, dagness, end - start))
-
-        if epoch % 10 == 0:
-            stoch_gate, noise_gate, s_thresh = [], [], []
-            with torch.no_grad():
-                for conditioner in model.module.getConditioners():
-                    stoch_gate.append(conditioner.stoch_gate)
-                    noise_gate.append(conditioner.noise_gate)
-                    s_thresh.append(conditioner.s_thresh)
-                    conditioner.stoch_gate = False
-                    conditioner.noise_gate = False
-                    conditioner.s_thresh = True
-                for threshold in [.95, .5, .1, .01, .0001]:
-                    for conditioner in model.module.getConditioners():
-                        conditioner.h_thresh = threshold
-                    # Valid loop
-                    ll_test = 0.
-                    bpp_test = 0.
-                    for batch_idx, (cur_x, target) in enumerate(valid_loader):
-                        cur_x = cur_x.view(batch_size, -1).float().to(master_device)
-                        z, jac = model(cur_x)
-                        ll = (model.module.z_log_density(z) + jac)
-                        ll_test += ll.mean().item()
-                        bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
-                    ll_test /= batch_idx + 1
-                    bpp_test /= batch_idx + 1
-                    dagness = max(model.module.DAGness())
-                    logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f}".
-                        format(epoch, threshold, ll_test, bpp_test, dagness))
-                for i, conditioner in enumerate(model.module.getConditioners()):
-                    conditioner.h_thresh = 0.
-                    conditioner.stoch_gate = stoch_gate[i]
-                    conditioner.noise_gate = noise_gate[i]
-                    conditioner.s_thresh = s_thresh[i]
+        logger.info("Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f} ".format(ll_test, bpp_test, dagness))
 
 
-                if dagness == 0 and -ll_test < best_valid_loss:
-                    logger.info("------- New best validation loss with threshold %f --------" % threshold)
-                    torch.save(model.state_dict(), path + '/best_model.pt')
-                    best_valid_loss = -ll_test
-                    # Valid loop
-                    ll_test = 0.
-                    for batch_idx, (cur_x, target) in enumerate(test_loader):
-                        z, jac = model(cur_x.view(batch_size, -1).float().to(master_device))
-                        ll = (model.module.z_log_density(z) + jac)
-                        ll_test += ll.mean().item()
-                        bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
 
-                    ll_test /= batch_idx + 1
-                    bpp_test /= batch_idx + 1
-                    logger.info("epoch: {:d} - Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".
-                                format(epoch, ll_test, bpp_test, dagness))
+        logger.info("------- Test loss with threshold -------")
+        torch.save(model.state_dict(), path + '/best_model.pt')
+        # Valid loop
+        ll_test = 0.
+        for batch_idx, (cur_x, target) in enumerate(test_loader):
+            z, jac = model(cur_x.view(batch_size, -1).float().to(master_device))
+            ll = (model.module.z_log_density(z) + jac)
+            ll_test += ll.mean().item()
+            bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
 
-                in_s = 784 if dataset == "MNIST" else 3*32*32
-                a_tmp = model.module.getConditioners()[0].soft_thresholded_A()[0, :]
-                a_tmp = a_tmp.view(28, 28).cpu().numpy() if dataset == "MNIST" else a_tmp.view(3, 32, 32).cpu().numpy()
-                fig, ax = plt.subplots()
-                mat = ax.matshow(a_tmp)
-                plt.colorbar(mat)
-                current_cmap = matplotlib.cm.get_cmap()
-                current_cmap.set_bad(color='red')
-                mat.set_clim(0, 1.)
-                def update(i):
-                    A = model.module.getConditioners()[0].soft_thresholded_A()[i, :].cpu().numpy()
-                    A[i] = np.nan
-                    if dataset == "MNIST":
-                        A = A.reshape(28, 28)
-                    elif dataset == "CIFAR10":
-                        A = A.reshape(3, 32, 32)
-                    mat.set_data(A)
-                    return mat
+        ll_test /= batch_idx + 1
+        bpp_test /= batch_idx + 1
+        logger.info("Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".format(ll_test, bpp_test, dagness))
 
-                # Set up formatting for the movie files
-                Writer = animation.writers['ffmpeg']
-                writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
-                ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
-                ani.save(path + '/A_epoch_%d.mp4' % epoch, writer=writer)
+    # Some plots and videos
 
-                deg_out = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(0).cpu().numpy()
-                deg_in = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(1).cpu().numpy()
-                fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-                if dataset == "MNIST":
-                    shape = (28, 28)
-                elif dataset == "CIFAR10":
-                    shape = (3, 32, 32)
-                res0 = ax[0].matshow(np.log(deg_in).reshape(shape))
-                ax[0].set(title="In degrees")
-                fig.colorbar(res0, ax=ax[0])
-                res1 = ax[1].matshow(np.log(deg_out.reshape(shape)))
-                ax[1].set(title="Out degrees")
-                fig.colorbar(res1, ax=ax[1])
-                plt.savefig(path + '/A_degrees_epoch_%d.png' % epoch)
+    # Video of the conditioning Matrix
+    in_s = 784 if dataset == "MNIST" else 3*32*32
+    a_tmp = model.module.getConditioners()[0].soft_thresholded_A()[0, :]
+    a_tmp = a_tmp.view(28, 28).cpu().numpy() if dataset == "MNIST" else a_tmp.view(3, 32, 32).cpu().numpy()
+    fig, ax = plt.subplots()
+    mat = ax.matshow(a_tmp)
+    plt.colorbar(mat)
+    current_cmap = matplotlib.cm.get_cmap()
+    current_cmap.set_bad(color='red')
+    mat.set_clim(0, 1.)
+    def update(i):
+        A = model.module.getConditioners()[0].soft_thresholded_A()[i, :].cpu().numpy()
+        A[i] = np.nan
+        if dataset == "MNIST":
+            A = A.reshape(28, 28)
+        elif dataset == "CIFAR10":
+            A = A.reshape(3, 32, 32)
+        mat.set_data(A)
+        return mat
 
-                if dagness == 0:
-                    n_images = 9
-                    for T in [.1, .25, .5, .75, 1.]:
-                        z = torch.randn(n_images, in_s).to(device=master_device) * T
-                        x = model.module.invert(z)
-                        print((z - model(x)[0]).abs().mean())
-                        grid_img = torchvision.utils.make_grid(x.view(n_images, 1, 28, 28), nrow=3)
-                        torchvision.utils.save_image(grid_img, path + '/images_%d_%f.png' % (epoch, T))
+    # Set up formatting for the movie files
+    Writer = animation.writers['ffmpeg']
+    writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+    #ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
+    #ani.save(path + '/A_test.mp4', writer=writer)
+    #plt.close(fig)
+
+    # Plot of the adjacency Matrix
+    A = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).float()
+    fig, ax = plt.subplots(1, 3)
+    ax[0].matshow(A)
+    G = nx.from_numpy_matrix(A.detach().cpu().numpy(), create_using=nx.DiGraph)
+    top_order = list(nx.topological_sort(G))
+    A_top = A.clone()
+    for i in range(in_s):
+        A_top[:, i] = A_top[:, i][top_order]
+    for j in range(in_s):
+        A_top[j, :] = A_top[j, :][top_order]
+    ax[1].matshow(np.array(top_order).reshape(28, 28))
+    ax[2].matshow(A_top)
+
+    plt.savefig(path + '/A_matrices.pdf')
+    plt.close(fig)
 
 
-        if epoch % nb_step_dual == 0:
-            logger.info("Saving model N°%d" % epoch)
-            torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
-            torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % epoch)
+    deg_out = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(0).cpu().numpy()
+    deg_in = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(1).cpu().numpy()
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+    if dataset == "MNIST":
+        shape = (28, 28)
+    elif dataset == "CIFAR10":
+        shape = (3, 32, 32)
+    res0 = ax[0].matshow(np.log(deg_in).reshape(shape))
+    ax[0].set(title="In degrees")
+    fig.colorbar(res0, ax=ax[0])
+    res1 = ax[1].matshow(np.log(deg_out.reshape(shape)))
+    ax[1].set(title="Out degrees")
+    fig.colorbar(res1, ax=ax[1])
+    plt.savefig(path + '/A_degrees_test.png')
 
-        torch.save(model.state_dict(), path + '/model.pt')
-        torch.save(opt.state_dict(), path + '/ADAM.pt')
-        torch.cuda.empty_cache()
+    with torch.no_grad():
+        n_images = 9
+        for T in [.1, .25, .5, .75, 1.]:
+            z = torch.randn(n_images, in_s).to(device=master_device) * T
+            x = model.module.invert(z)
+            print((z - model(x)[0]).abs().mean())
+            grid_img = torchvision.utils.make_grid(x.view(n_images, 1, 28, 28), nrow=3)
+            torchvision.utils.save_image(grid_img, path + '/images_test_%f.png' % T)
+
 
 import argparse
 
@@ -386,7 +323,7 @@ now = datetime.now()
 path = args.dataset + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
 if not (os.path.isdir(path)):
     os.makedirs(path)
-train(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
+test(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
       int_net=args.int_net, b_size=args.b_size, all_args=args, nb_flow=args.nb_flow,
       nb_steps=args.nb_steps, file_number=args.f_number, norm_type=args.normalizer,
       solver=args.solver, train=not args.test, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
