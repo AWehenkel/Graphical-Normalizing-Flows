@@ -227,69 +227,75 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
 
     # Some plots and videos
 
-    # Video of the conditioning Matrix
-    in_s = 784 if dataset == "MNIST" else 3*32*32
-    a_tmp = model.module.getConditioners()[0].soft_thresholded_A()[0, :]
-    a_tmp = a_tmp.view(28, 28).cpu().numpy() if dataset == "MNIST" else a_tmp.view(3, 32, 32).cpu().numpy()
-    fig, ax = plt.subplots()
-    mat = ax.matshow(a_tmp)
-    plt.colorbar(mat)
-    current_cmap = matplotlib.cm.get_cmap()
-    current_cmap.set_bad(color='red')
-    mat.set_clim(0, 1.)
-    def update(i):
-        A = model.module.getConditioners()[0].soft_thresholded_A()[i, :].cpu().numpy()
-        A[i] = np.nan
-        if dataset == "MNIST":
-            A = A.reshape(28, 28)
-        elif dataset == "CIFAR10":
-            A = A.reshape(3, 32, 32)
-        mat.set_data(A)
-        return mat
 
-    # Set up formatting for the movie files
-    Writer = animation.writers['ffmpeg']
-    writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
-    #ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
-    #ani.save(path + '/A_test.mp4', writer=writer)
-    #plt.close(fig)
 
     # Plot of the adjacency Matrix
-    A = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).float()
-    fig, ax = plt.subplots(1, 3)
-    ax[0].matshow(A)
-    G = nx.from_numpy_matrix(A.detach().cpu().numpy(), create_using=nx.DiGraph)
-    top_order = list(nx.topological_sort(G))
-    A_top = A.clone()
-    for i in range(in_s):
-        A_top[:, i] = A_top[:, i][top_order]
-    for j in range(in_s):
-        A_top[j, :] = A_top[j, :][top_order]
-    ax[1].matshow(np.array(top_order).reshape(28, 28))
-    ax[2].matshow(A_top)
+    if False:
+        for i_cond, conditioner in enumerate(model.module.getConditioners()):
+            # Video of the conditioning Matrix
+            in_s = conditioner.in_size if dataset == "MNIST" else 3 * 32 * 32
+            a_tmp = conditioner.soft_thresholded_A()[0, :]
+            a_tmp = a_tmp.view(int(in_s**.5), int(in_s**.5)).cpu().numpy() if dataset == "MNIST" else a_tmp.view(3, 32, 32).cpu().numpy()
+            fig, ax = plt.subplots()
+            mat = ax.matshow(a_tmp)
+            plt.colorbar(mat)
+            current_cmap = matplotlib.cm.get_cmap()
+            current_cmap.set_bad(color='red')
+            mat.set_clim(0, 1.)
 
-    plt.savefig(path + '/A_matrices.pdf')
-    plt.close(fig)
+            def update(i):
+                A = conditioner.soft_thresholded_A()[i, :].cpu().numpy()
+                A[i] = np.nan
+                if dataset == "MNIST":
+                    A = A.reshape(int(in_s**.5), int(in_s**.5))
+                elif dataset == "CIFAR10":
+                    A = A.reshape(3, 32, 32)
+                mat.set_data(A)
+                return mat
+
+            # Set up formatting for the movie files
+            Writer = animation.writers['ffmpeg']
+            writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+            ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
+            ani.save(path + '/A_test%d.mp4' % i_cond, writer=writer)
+            plt.close(fig)
+
+            A = (conditioner.soft_thresholded_A() > 0.).float()
+            fig, ax = plt.subplots(1, 3)
+            ax[0].matshow(A)
+            G = nx.from_numpy_matrix(A.detach().cpu().numpy(), create_using=nx.DiGraph)
+            top_order = list(nx.topological_sort(G))
+            A_top = A.clone()
+            for i in range(in_s):
+                A_top[:, i] = A_top[:, i][top_order]
+            for j in range(in_s):
+                A_top[j, :] = A_top[j, :][top_order]
+            ax[1].matshow(np.array(top_order).reshape(int(in_s**.5), int(in_s**.5)))
+            ax[2].matshow(A_top)
+
+            plt.savefig(path + '/A_matrices%d.pdf' % i_cond)
+            plt.close(fig)
 
 
-    deg_out = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(0).cpu().numpy()
-    deg_in = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(1).cpu().numpy()
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    if dataset == "MNIST":
-        shape = (28, 28)
-    elif dataset == "CIFAR10":
-        shape = (3, 32, 32)
-    res0 = ax[0].matshow(np.log(deg_in).reshape(shape))
-    ax[0].set(title="In degrees")
-    fig.colorbar(res0, ax=ax[0])
-    res1 = ax[1].matshow(np.log(deg_out.reshape(shape)))
-    ax[1].set(title="Out degrees")
-    fig.colorbar(res1, ax=ax[1])
-    plt.savefig(path + '/A_degrees_test.png')
+            deg_out = (conditioner.soft_thresholded_A() > 0.).sum(0).cpu().numpy()
+            deg_in = (conditioner.soft_thresholded_A() > 0.).sum(1).cpu().numpy()
+            fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+            if dataset == "MNIST":
+                shape = (int(in_s**.5), int(in_s**.5))
+            elif dataset == "CIFAR10":
+                shape = (3, 32, 32)
+            res0 = ax[0].matshow(np.log(deg_in).reshape(shape))
+            ax[0].set(title="In degrees")
+            fig.colorbar(res0, ax=ax[0])
+            res1 = ax[1].matshow(np.log(deg_out.reshape(shape)))
+            ax[1].set(title="Out degrees")
+            fig.colorbar(res1, ax=ax[1])
+            plt.savefig(path + '/A_degrees_test%d.png' % i_cond)
 
     with torch.no_grad():
         n_images = 16
-        for T in [.1, .25, .5, .75, 1.]:
+        in_s = 784
+        for T in [1.25, 1.5, .1, .25, .5, .75, 1.]:
             z = torch.randn(n_images, in_s).to(device=master_device) * T
             x = model.module.invert(z)
             print((z - model(x)[0]).abs().mean())

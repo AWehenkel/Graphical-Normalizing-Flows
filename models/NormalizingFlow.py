@@ -177,5 +177,33 @@ class CNNormalizingFlow(FCNormalizingFlow):
         return z, jac_tot
 
     def invert(self, z, context=None):
-        #TODO implement it.
-        return None
+        b_size = z.shape[0]
+        z_all = []
+        i = 0
+        for step, drop_factors in zip(self.steps, self.dropping_factors):
+            d_c, d_h, d_w = drop_factors
+            C, H, W = step.img_sizes
+            c, h, w = int(C / d_c), int(H / d_h), int(W / d_w)
+            nb_z = C*H*W - c*h*w if C*H*W != c*h*w else c*h*w
+            z_all += [z[:, i:i+nb_z]]
+            i += nb_z
+
+        x = 0.
+        for i in range(1, len(self.steps) + 1):
+            step = self.steps[-i]
+            drop_factors = self.dropping_factors[-i]
+            d_c, d_h, d_w = drop_factors
+            C, H, W = step.img_sizes
+            c, h, w = int(C / d_c), int(H / d_h), int(W / d_w)
+            z = z_all[-i]
+            if c*h*w != C*H*W:
+                z = z.view(b_size, c, h, w, -1)
+                x = x.view(b_size, c, h, w, 1)
+                z = torch.cat((x, z), 4)
+                z = z.view(b_size, c, h, w, d_c, d_h, d_w)
+                z = z.permute(0, 1, 2, 3, 6, 4, 5).contiguous().view(b_size, c, h, W, d_c, d_h)
+                z = z.permute(0, 1, 2, 5, 3, 4).contiguous().view(b_size, c, H, W, d_c)
+                z = z.permute(0, 1, 4, 2, 3).contiguous().view(b_size, C, H, W)
+            x = step.invert(z.view(b_size, -1), context)
+        return x
+

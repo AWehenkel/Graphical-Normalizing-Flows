@@ -146,6 +146,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         normalizer_args = {"integrand_net": int_net, "nb_steps": 15, "solver": solver}
 
     if conditioner == "DAG":
+        conditioner_type = DAGConditioner
         if dataset == "MNIST":
             inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
                                                     nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
@@ -160,6 +161,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         dim = 28**2 if dataset == "MNIST" else 32*32*3
         conditioner_type = cond_types[conditioner]
         conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1]}
+        if norm_type == 'Monotonic':
+            normalizer_args["cond_size"] = emb_net[-1]
 
         inner_model = buildFCNormalizingFlow(nb_flow[0], conditioner_type, conditioner_args, normalizer_type, normalizer_args)
     model = nn.DataParallel(inner_model, device_ids=list(range(n_gpu))).to(master_device)
@@ -244,7 +247,22 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         logger.info(
             "epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f} "
             "- Elapsed time per epoch {:4f} (seconds)".format(epoch, ll_tot, ll_test, bpp_test, dagness, end - start))
+        if dagness == 0 and -ll_test < best_valid_loss:
+            logger.info("------- New best validation loss with threshold %f --------" % threshold)
+            torch.save(model.state_dict(), path + '/best_model.pt')
+            best_valid_loss = -ll_test
+            # Valid loop
+            ll_test = 0.
+            for batch_idx, (cur_x, target) in enumerate(test_loader):
+                z, jac = model(cur_x.view(batch_size, -1).float().to(master_device))
+                ll = (model.module.z_log_density(z) + jac)
+                ll_test += ll.mean().item()
+                bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
 
+            ll_test /= batch_idx + 1
+            bpp_test /= batch_idx + 1
+            logger.info("epoch: {:d} - Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".
+                        format(epoch, ll_test, bpp_test, dagness))
         if epoch % 10 == 0 and conditioner_type is DAGConditioner:
             stoch_gate, noise_gate, s_thresh = [], [], []
             with torch.no_grad():
@@ -279,22 +297,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     conditioner.s_thresh = s_thresh[i]
 
 
-                if dagness == 0 and -ll_test < best_valid_loss:
-                    logger.info("------- New best validation loss with threshold %f --------" % threshold)
-                    torch.save(model.state_dict(), path + '/best_model.pt')
-                    best_valid_loss = -ll_test
-                    # Valid loop
-                    ll_test = 0.
-                    for batch_idx, (cur_x, target) in enumerate(test_loader):
-                        z, jac = model(cur_x.view(batch_size, -1).float().to(master_device))
-                        ll = (model.module.z_log_density(z) + jac)
-                        ll_test += ll.mean().item()
-                        bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
 
-                    ll_test /= batch_idx + 1
-                    bpp_test /= batch_idx + 1
-                    logger.info("epoch: {:d} - Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".
-                                format(epoch, ll_test, bpp_test, dagness))
 
                 in_s = 784 if dataset == "MNIST" else 3*32*32
                 a_tmp = model.module.getConditioners()[0].soft_thresholded_A()[0, :]
@@ -338,6 +341,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
         if dagness == 0:
             n_images = 16
+            in_s = 28**2
             for T in [.1, .25, .5, .75, 1.]:
                 z = torch.randn(n_images, in_s).to(device=master_device) * T
                 x = model.module.invert(z)
