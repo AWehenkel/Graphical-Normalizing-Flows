@@ -71,7 +71,7 @@ class MonotonicNormalizer(Normalizer):
         x_min = -torch.ones_like(z) * 20
         z_max, _ = self.forward(x_max, h, context)
         z_min, _ = self.forward(x_min, h, context)
-        for i in range(25):
+        for i in range(20):
             x_middle = (x_max + x_min) / 2
             z_middle, _ = self.forward(x_middle, h, context)
             left = (z_middle > z).float()

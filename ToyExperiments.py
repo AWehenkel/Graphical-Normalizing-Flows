@@ -172,8 +172,8 @@ parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs
 args = parser.parse_args()
 
 for d in ["pinwheel"]:
-    for net in [[200, 200, 200, 200, 200]]:
-        for nb_flow in [1, 2, 3, 4,]:
+    for net in [[300, 300, 300, 300, 300]]:
+        for nb_flow in [3, 4,]:
             if not (os.path.isdir(args.folder + d)):
                 os.makedirs(args.folder + d)
             train_toy(d, load=False, nb_epoch=30000, nb_flow=nb_flow, cond_type="Coupling", emb_net=net)

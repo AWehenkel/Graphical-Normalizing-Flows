@@ -186,19 +186,21 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
                     plt.savefig(path + "/test.pdf")
                     conditioner.post_process()
 
+    for normalizer in model.module.getNormalizers():
+        if type(normalizer) is MonotonicNormalizer:
+            print(normalizer.nb_steps)
+            normalizer.nb_steps = 200
+
     # ----------------------- Valid Loop ------------------------- #
     if False:
         ll_test = 0.
         bpp_test = 0.
         model.to(master_device)
         with torch.no_grad():
-            for normalizer in model.module.getNormalizers():
-                if type(normalizer) is MonotonicNormalizer:
-                    normalizer.nb_steps = 20
             for batch_idx, (cur_x, target) in enumerate(valid_loader):
                 cur_x = cur_x.view(batch_size, -1).float().to(master_device)
                 z, jac = model(cur_x)
-                x_inv = model.module.invert(z)
+                #x_inv = model.module.invert(z)
                 ll = (model.module.z_log_density(z) + jac)
                 ll_test += ll.mean().item()
                 bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
@@ -210,20 +212,23 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
         logger.info("Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f} ".format(ll_test, bpp_test, dagness))
 
 
-
+    if False:
         logger.info("------- Test loss with threshold -------")
         torch.save(model.state_dict(), path + '/best_model.pt')
         # Valid loop
         ll_test = 0.
-        for batch_idx, (cur_x, target) in enumerate(test_loader):
-            z, jac = model(cur_x.view(batch_size, -1).float().to(master_device))
-            ll = (model.module.z_log_density(z) + jac)
-            ll_test += ll.mean().item()
-            bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
+        bpp_test = 0.
+        with torch.no_grad():
+            for batch_idx, (cur_x, target) in enumerate(test_loader):
+                z, jac = model(cur_x.view(batch_size, -1).float().to(master_device))
+                ll = (model.module.z_log_density(z) + jac)
+                ll_test += ll.mean().item()
+                bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
+                print(bpp_test / (batch_idx + 1))
 
         ll_test /= batch_idx + 1
         bpp_test /= batch_idx + 1
-        logger.info("Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".format(ll_test, bpp_test, dagness))
+        logger.info("Test log-likelihood: {:4f} - Test BPP {:4f}".format(ll_test, bpp_test))
 
     # Some plots and videos
 
@@ -293,13 +298,15 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
             plt.savefig(path + '/A_degrees_test%d.png' % i_cond)
 
     with torch.no_grad():
-        n_images = 16
+        n_images = 5
         in_s = 784
-        for T in [1.25, 1.5, .1, .25, .5, .75, 1.]:
+        images = []
+        for T in [.75, 0.8, 0.85, 0.9, 1., 1.05, 1.1, 1.15]:
             z = torch.randn(n_images, in_s).to(device=master_device) * T
             x = model.module.invert(z)
+            images += [x.view(n_images, 1, 28, 28)]
             print((z - model(x)[0]).abs().mean())
-            grid_img = torchvision.utils.make_grid(x.view(n_images, 1, 28, 28), nrow=4)
+            grid_img = torchvision.utils.make_grid(torch.cat(images, 0), nrow=n_images)
             torchvision.utils.save_image(grid_img, path + '/images_test_%f.png' % T)
 
 

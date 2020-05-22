@@ -232,40 +232,39 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         with torch.no_grad():
             for normalizer in model.module.getNormalizers():
                 if type(normalizer) is MonotonicNormalizer:
-                    normalizer.nb_steps = 30
+                    normalizer.nb_steps = 150
             for batch_idx, (cur_x, target) in enumerate(valid_loader):
                 cur_x = cur_x.view(batch_size, -1).float().to(master_device)
                 z, jac = model(cur_x)
                 ll = (model.module.z_log_density(z) + jac)
                 ll_test += ll.mean().item()
                 bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
-        ll_test /= batch_idx + 1
-        bpp_test /= batch_idx + 1
-        end = timer()
-
-        dagness = max(model.module.DAGness())
-        logger.info(
-            "epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f} "
-            "- Elapsed time per epoch {:4f} (seconds)".format(epoch, ll_tot, ll_test, bpp_test, dagness, end - start))
-        if dagness == 0 and -ll_test < best_valid_loss:
-            logger.info("------- New best validation loss with threshold %f --------" % threshold)
-            torch.save(model.state_dict(), path + '/best_model.pt')
-            best_valid_loss = -ll_test
-            # Valid loop
-            ll_test = 0.
-            for batch_idx, (cur_x, target) in enumerate(test_loader):
-                z, jac = model(cur_x.view(batch_size, -1).float().to(master_device))
-                ll = (model.module.z_log_density(z) + jac)
-                ll_test += ll.mean().item()
-                bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
-
             ll_test /= batch_idx + 1
             bpp_test /= batch_idx + 1
-            logger.info("epoch: {:d} - Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".
-                        format(epoch, ll_test, bpp_test, dagness))
-        if epoch % 10 == 0 and conditioner_type is DAGConditioner:
-            stoch_gate, noise_gate, s_thresh = [], [], []
-            with torch.no_grad():
+            end = timer()
+
+            dagness = max(model.module.DAGness())
+            logger.info(
+                "epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f} "
+                "- Elapsed time per epoch {:4f} (seconds)".format(epoch, ll_tot, ll_test, bpp_test, dagness, end - start))
+            if dagness == 0 and -ll_test < best_valid_loss:
+                logger.info("------- New best validation loss with threshold %f --------" % threshold)
+                torch.save(model.state_dict(), path + '/best_model.pt')
+                best_valid_loss = -ll_test
+                # Valid loop
+                ll_test = 0.
+                for batch_idx, (cur_x, target) in enumerate(test_loader):
+                    z, jac = model(cur_x.view(batch_size, -1).float().to(master_device))
+                    ll = (model.module.z_log_density(z) + jac)
+                    ll_test += ll.mean().item()
+                    bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
+
+                ll_test /= batch_idx + 1
+                bpp_test /= batch_idx + 1
+                logger.info("epoch: {:d} - Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".
+                            format(epoch, ll_test, bpp_test, dagness))
+            if epoch % 10 == 0 and conditioner_type is DAGConditioner:
+                stoch_gate, noise_gate, s_thresh = [], [], []
                 for conditioner in model.module.getConditioners():
                     stoch_gate.append(conditioner.stoch_gate)
                     noise_gate.append(conditioner.noise_gate)
@@ -339,25 +338,24 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 fig.colorbar(res1, ax=ax[1])
                 plt.savefig(path + '/A_degrees_epoch_%d.png' % epoch)
 
-        if dagness == 0:
-            n_images = 16
-            in_s = 28**2
-            for T in [.1, .25, .5, .75, 1.]:
-                z = torch.randn(n_images, in_s).to(device=master_device) * T
-                x = model.module.invert(z)
-                print((z - model(x)[0]).abs().mean())
-                grid_img = torchvision.utils.make_grid(x.view(n_images, 1, 28, 28), nrow=4)
-                torchvision.utils.save_image(grid_img, path + '/images_%d_%f.png' % (epoch, T))
+            if dagness == 0:
+                n_images = 16
+                in_s = 28**2
+                for T in [.1, .25, .5, .75, 1.]:
+                    z = torch.randn(n_images, in_s).to(device=master_device) * T
+                    x = model.module.invert(z)
+                    print((z - model(x)[0]).abs().mean())
+                    grid_img = torchvision.utils.make_grid(x.view(n_images, 1, 28, 28), nrow=4)
+                    torchvision.utils.save_image(grid_img, path + '/images_%d_%f.png' % (epoch, T))
 
+            if epoch % nb_step_dual == 0:
+                logger.info("Saving model N°%d" % epoch)
+                torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
+                torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % epoch)
 
-        if epoch % nb_step_dual == 0:
-            logger.info("Saving model N°%d" % epoch)
-            torch.save(model.state_dict(), path + '/model_%d.pt' % epoch)
-            torch.save(opt.state_dict(), path + '/ADAM_%d.pt' % epoch)
-
-        torch.save(model.state_dict(), path + '/model.pt')
-        torch.save(opt.state_dict(), path + '/ADAM.pt')
-        torch.cuda.empty_cache()
+            torch.save(model.state_dict(), path + '/model.pt')
+            torch.save(opt.state_dict(), path + '/ADAM.pt')
+            torch.cuda.empty_cache()
 
 import argparse
 
