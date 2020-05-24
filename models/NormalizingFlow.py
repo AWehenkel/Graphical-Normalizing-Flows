@@ -39,6 +39,12 @@ class NormalizingFlow(nn.Module):
         pass
 
     '''
+    Return True if the architecture is invertible.
+    '''
+    def isInvertible(self):
+        pass
+
+    '''
         Return a list containing the normalizers.
         '''
 
@@ -82,6 +88,12 @@ class NormalizingFlowStep(NormalizingFlow):
 
     def getNormalizers(self):
         return [self.normalizer]
+
+    def isInvertible(self):
+        for conditioner in self.getConditioners():
+            if not conditioner.is_invertible:
+                return False
+        return True
 
     def invert(self, z, context=None):
         x = torch.zeros_like(z)
@@ -144,6 +156,12 @@ class FCNormalizingFlow(NormalizingFlow):
         for step in self.steps:
             conditioners += step.getConditioners()
         return conditioners
+
+    def isInvertible(self):
+        for conditioner in self.getConditioners():
+            if not conditioner.is_invertible:
+                return False
+        return True
 
     def invert(self, z, context=None):
         for step in range(len(self.steps)):

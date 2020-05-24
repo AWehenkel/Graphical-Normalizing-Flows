@@ -338,15 +338,16 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 fig.colorbar(res1, ax=ax[1])
                 plt.savefig(path + '/A_degrees_epoch_%d.png' % epoch)
 
-            if dagness == 0:
-                n_images = 16
-                in_s = 28**2
-                for T in [.1, .25, .5, .75, 1.]:
-                    z = torch.randn(n_images, in_s).to(device=master_device) * T
-                    x = model.module.invert(z)
-                    print((z - model(x)[0]).abs().mean())
-                    grid_img = torchvision.utils.make_grid(x.view(n_images, 1, 28, 28), nrow=4)
-                    torchvision.utils.save_image(grid_img, path + '/images_%d_%f.png' % (epoch, T))
+            if model.module.isInvetible():
+                with torch.no_grad():
+                    n_images = 16
+                    in_s = 28**2
+                    for T in [.1, .25, .5, .75, 1.]:
+                        z = torch.randn(n_images, in_s).to(device=master_device) * T
+                        x = model.module.invert(z)
+                        print((z - model(x)[0]).abs().mean())
+                        grid_img = torchvision.utils.make_grid(x.view(n_images, 1, 28, 28), nrow=4)
+                        torchvision.utils.save_image(grid_img, path + '/images_%d_%f.png' % (epoch, T))
 
             if epoch % nb_step_dual == 0:
                 logger.info("Saving model N°%d" % epoch)

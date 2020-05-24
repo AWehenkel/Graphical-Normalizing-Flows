@@ -189,7 +189,7 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
     for normalizer in model.module.getNormalizers():
         if type(normalizer) is MonotonicNormalizer:
             print(normalizer.nb_steps)
-            normalizer.nb_steps = 200
+            normalizer.nb_steps = 250
 
     # ----------------------- Valid Loop ------------------------- #
     if False:
@@ -200,7 +200,11 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
             for batch_idx, (cur_x, target) in enumerate(valid_loader):
                 cur_x = cur_x.view(batch_size, -1).float().to(master_device)
                 z, jac = model(cur_x)
-                #x_inv = model.module.invert(z)
+                x_inv = model.module.invert(z)
+                fig, ax = plt.subplots(1, 2)
+        #ax[0].matshow(cur_x[0].view(28, 28))
+                #ax[1].matshow(x_inv[0].view(28, 28))
+                #plt.show()
                 ll = (model.module.z_log_density(z) + jac)
                 ll_test += ll.mean().item()
                 bpp_test += compute_bpp(ll, cur_x.view(batch_size, -1).float().to(master_device), alpha).mean().item()
@@ -301,7 +305,7 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
         n_images = 5
         in_s = 784
         images = []
-        for T in [.75, 0.8, 0.85, 0.9, 1., 1.05, 1.1, 1.15]:
+        for T in [0.9, 1., 1.05, 1.1, 1.15]:
             z = torch.randn(n_images, in_s).to(device=master_device) * T
             x = model.module.invert(z)
             images += [x.view(n_images, 1, 28, 28)]
