@@ -15,7 +15,10 @@ import torchvision.transforms as tforms
 import matplotlib.animation as animation
 import matplotlib
 import torchvision
+import seaborn as sns
 
+S = "\n"
+sns.set()
 def add_noise(x):
     """
     [0, 1] -> [0, 255] -> add noise -> [0, 1]
@@ -239,7 +242,7 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
 
 
     # Plot of the adjacency Matrix
-    if False:
+    if True:
         for i_cond, conditioner in enumerate(model.module.getConditioners()):
             # Video of the conditioning Matrix
             in_s = conditioner.in_size if dataset == "MNIST" else 3 * 32 * 32
@@ -265,9 +268,9 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
             # Set up formatting for the movie files
             Writer = animation.writers['ffmpeg']
             writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
-            ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
-            ani.save(path + '/A_test%d.mp4' % i_cond, writer=writer)
-            plt.close(fig)
+            #ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
+            #ani.save(path + '/A_test%d.mp4' % i_cond, writer=writer)
+            #plt.close(fig)
 
             A = (conditioner.soft_thresholded_A() > 0.).float()
             fig, ax = plt.subplots(1, 3)
@@ -288,18 +291,22 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
 
             deg_out = (conditioner.soft_thresholded_A() > 0.).sum(0).cpu().numpy()
             deg_in = (conditioner.soft_thresholded_A() > 0.).sum(1).cpu().numpy()
+            import matplotlib as mpl
+            label_size = 20
+            mpl.rcParams['xtick.labelsize'] = label_size
+            mpl.rcParams['ytick.labelsize'] = label_size
             fig, ax = plt.subplots(1, 2, figsize=(12, 6))
             if dataset == "MNIST":
                 shape = (int(in_s**.5), int(in_s**.5))
             elif dataset == "CIFAR10":
                 shape = (3, 32, 32)
-            res0 = ax[0].matshow(np.log(deg_in).reshape(shape))
-            ax[0].set(title="In degrees")
-            fig.colorbar(res0, ax=ax[0])
-            res1 = ax[1].matshow(np.log(deg_out.reshape(shape)))
-            ax[1].set(title="Out degrees")
-            fig.colorbar(res1, ax=ax[1])
-            plt.savefig(path + '/A_degrees_test%d.png' % i_cond)
+            res0 = ax[0].matshow(deg_in.reshape(shape))
+            ax[0].set_xlabel("\n(a)", fontsize=20)
+            #fig.colorbar(res0, ax=ax[0])
+            res1 = ax[1].matshow(deg_out.reshape(shape))
+            ax[1].set_xlabel("\n(b)", fontsize=20)
+            fig.colorbar(res1, ax=ax[:], shrink=0.75)
+            plt.savefig(path + '/A_degrees_test%d.pdf' % i_cond)
 
     with torch.no_grad():
         n_images = 5

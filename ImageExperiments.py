@@ -247,8 +247,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             logger.info(
                 "epoch: {:d} - Train loss: {:4f} - Valid log-likelihood: {:4f} - Valid BPP {:4f} - <<DAGness>>: {:4f} "
                 "- Elapsed time per epoch {:4f} (seconds)".format(epoch, ll_tot, ll_test, bpp_test, dagness, end - start))
-            if dagness == 0 and -ll_test < best_valid_loss:
-                logger.info("------- New best validation loss with threshold %f --------" % threshold)
+            if model.module.isInvertible() and -ll_test < best_valid_loss:
+                logger.info("------- New best validation loss --------")
                 torch.save(model.state_dict(), path + '/best_model.pt')
                 best_valid_loss = -ll_test
                 # Valid loop
@@ -338,7 +338,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 fig.colorbar(res1, ax=ax[1])
                 plt.savefig(path + '/A_degrees_epoch_%d.png' % epoch)
 
-            if model.module.isInvetible():
+            if model.module.isInvertible():
                 with torch.no_grad():
                     n_images = 16
                     in_s = 28**2

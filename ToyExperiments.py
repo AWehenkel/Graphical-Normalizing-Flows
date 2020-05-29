@@ -38,7 +38,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     norm_type = "Affine"
     save_name = norm_type + str(emb_net) + str(nb_flow)
     solver = "CCParallel"
-    int_net = [50, 50, 50]
+    int_net = [150, 150, 150]
 
     conditioner_type = cond_types[cond_type]
     conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1]}
@@ -172,11 +172,11 @@ parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs
 args = parser.parse_args()
 
 for d in ["pinwheel"]:
-    for net in [[300, 300, 300, 300, 300]]:
-        for nb_flow in [3, 4,]:
+    for net in [[200, 200, 200, 200]]:
+        for nb_flow in [5]:
             if not (os.path.isdir(args.folder + d)):
                 os.makedirs(args.folder + d)
-            train_toy(d, load=False, nb_epoch=30000, nb_flow=nb_flow, cond_type="Coupling", emb_net=net)
+            train_toy(d, load=False, nb_epoch=50000, nb_flow=nb_flow, cond_type="Coupling", emb_net=net)
 
 if args.dataset is None:
     toys = datasets
