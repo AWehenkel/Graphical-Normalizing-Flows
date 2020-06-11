@@ -1,0 +1,9 @@
+torch==1.5.0
+torchvision==0.6.0
+UMNN==1.0
+h5py
+networkx==2.4
+pandas
+PyYAML==5.3.1
+scikit-learn
+

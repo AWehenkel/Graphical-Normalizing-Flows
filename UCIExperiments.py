@@ -3,9 +3,6 @@ import lib.utils as utils
 from datetime import datetime
 import yaml
 import os
-import matplotlib
-import matplotlib.pyplot as plt
-import networkx as nx
 import UCIdatasets
 import numpy as np
 from models.Normalizers import *
