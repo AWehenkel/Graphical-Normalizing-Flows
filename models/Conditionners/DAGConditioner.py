@@ -155,8 +155,15 @@ class DAGConditioner(Conditioner):
         if self.hot_encoding:
             hot_encoding = torch.eye(self.in_size, device=self.A.device).unsqueeze(0).expand(x.shape[0], -1, -1)\
                 .contiguous().view(-1, self.in_size)
+            # TODO CLEAN CODE FOR the positional encoding.
+            width = int(self.in_size**.5)
+            indices = torch.arange(width, device=self.A.device).unsqueeze(0).expand(width, -1).contiguous()
+            mesh = torch.cat((indices.view(-1, 1), indices.T.contiguous().view(-1, 1)), 1).float()/width
+            pos_encoding = mesh.unsqueeze(0).expand(x.shape[0], -1, -1).contiguous().view(-1, 2)
             e = self.embedding_net(e)
-            full_e = torch.cat((e, hot_encoding), 1).view(x.shape[0], self.in_size, -1)
+            #full_e = torch.cat((e, hot_encoding), 1).view(x.shape[0], self.in_size, -1)
+            full_e = torch.cat((e, pos_encoding), 1).view(x.shape[0], self.in_size, -1)
+
             # TODO Add context
             return full_e
 
@@ -168,8 +175,10 @@ class DAGConditioner(Conditioner):
         return
 
     def get_power_trace(self):
+        print("ici")
         alpha = min(1., self.alpha)
         alpha *= self.alpha_factor
+        print(alpha, self.in_size)
         if self.hutchinson != 0:
             h_iter = self.hutchinson
             trace = 0.
@@ -184,6 +193,7 @@ class DAGConditioner(Conditioner):
             return trace / h_iter - self.in_size
 
         B = (torch.eye(self.in_size, device=self.A.device) + alpha * self.A ** 2)
+        print(B.norm(), self.exponent)
         M = torch.matrix_power(B, self.exponent)
         return torch.diag(M).sum() - self.in_size
 

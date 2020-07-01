@@ -4,7 +4,7 @@ from .Normalizers import *
 from .Conditionners import *
 from .NormalizingFlow import NormalizingFlowStep, FCNormalizingFlow, CNNormalizingFlow
 from math import pi
-from .MLP import MNISTCNN, CIFAR10CNN
+from .MLP import MNISTCNN, CIFAR10CNN, MLP
 
 
 class NormalLogDensity(nn.Module):
@@ -46,6 +46,7 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
         img_sizes = [[1, 28, 28], [1, 14, 14], [1, 7, 7]]
         dropping_factors = [[1, 2, 2], [1, 2, 2], [1, 1, 1]]
         fc_l = [[2304, 128], [400, 64], [16, 16]]
+        nb_epoch_update = [10, 25, 50]
 
         outter_steps = []
         for i, fc in zip(range(len(fc_l)), fc_l):
@@ -56,10 +57,12 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
 
                 hidden = MNISTCNN(fc_l=fc, size_img=img_sizes[i], out_d=emb_s)
                 A_prior = MNIST_A_prior(img_sizes[i][1], prior_kernel) if prior_kernel is not None else None
-                cond = DAGConditioner(in_size, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update,
+                cond = DAGConditioner(in_size, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update[i],
                                       hot_encoding=hot_encoding, A_prior=A_prior)
                 if normalizer_type is MonotonicNormalizer:
-                    emb_s = 30 + in_size if hot_encoding else 30
+                    #emb_s = 30 + in_size if hot_encoding else 30
+                    emb_s = 30 + 2 if hot_encoding else 30
+
                     norm = normalizer_type(**normalizer_args, cond_size=emb_s)
                 else:
                     norm = normalizer_type(**normalizer_args)
@@ -79,7 +82,9 @@ def buildMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, 
             cond = DAGConditioner(1*28*28, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update,
                                   hot_encoding=hot_encoding, A_prior=A_prior)
             if normalizer_type is MonotonicNormalizer:
-                emb_s = 30 + 28*28 if hot_encoding else 30
+                #emb_s = 30 + 28*28 if hot_encoding else 30
+                emb_s = 30 + 2 if hot_encoding else 30
+
                 norm = normalizer_type(**normalizer_args, cond_size=emb_s)
             else:
                 norm = normalizer_type(**normalizer_args)
@@ -121,6 +126,83 @@ def buildCIFAR10NormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args
             hidden = CIFAR10CNN(fc_l=[400, 128, 84], size_img=[3, 32, 32], out_d=emb_s, k_size=5)
             cond = DAGConditioner(3*32*32, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update)
             norm = normalizer_type(**normalizer_args)
+            flow_step = NormalizingFlowStep(cond, norm)
+            inner_steps.append(flow_step)
+        flow = FCNormalizingFlow(inner_steps, NormalLogDensity())
+        return flow
+    else:
+        return None
+
+def buildSubMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_args, l1=0., nb_epoch_update=10,
+                              hot_encoding=False, prior_kernel=2):
+    if len(nb_inner_steps) == 3:
+        img_sizes = [[1, 28, 28], [1, 14, 14], [1, 7, 7]]
+        dropping_factors = [[1, 2, 2], [1, 2, 2], [1, 1, 1]]
+        fc_l = [[2304, 128], [400, 64], [16, 16]]
+        nb_epoch_update = [10, 25, 50]
+
+        outter_steps = []
+        for i, fc in zip(range(len(fc_l)), fc_l):
+            in_size = img_sizes[i][0] * img_sizes[i][1] * img_sizes[i][2]
+            inner_steps = []
+            for step in range(nb_inner_steps[i]):
+                emb_s = 2 if normalizer_type is AffineNormalizer else 30
+                #TODO ADD pixel position
+                in_s = (prior_kernel * 2 + 1) ** 2 - 1
+                hidden = MLP(in_d=in_s, hidden=[in_s * 4, in_s * 4], out_d=emb_s)
+                A_prior = MNIST_A_prior(img_sizes[i][1], prior_kernel)
+
+                # Computing the mask indices, filled with zero when the number of indices is smaller than the size.
+                sub_mask = torch.zeros(A_prior.shape[0], (prior_kernel*2+1)**2 - 1).int()
+                for pix in range(A_prior.shape[0]):
+                    idx = torch.nonzero(A_prior[pix, :]).int().view(-1)
+                    if idx.shape[0] < sub_mask.shape[1]:
+                        idx = torch.cat((idx.int(), torch.zeros(sub_mask.shape[1] - idx.shape[0]).int()))
+                    sub_mask[pix, :] = idx
+
+
+                cond = SubDAGConditioner(in_size, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update[i],
+                                      hot_encoding=hot_encoding, A_prior=A_prior, sub_mask=sub_mask.long())
+                if normalizer_type is MonotonicNormalizer:
+                    #emb_s = 30 + in_size if hot_encoding else 30
+                    emb_s = 30 + 2 if hot_encoding else 30
+
+                    norm = normalizer_type(**normalizer_args, cond_size=emb_s)
+                else:
+                    norm = normalizer_type(**normalizer_args)
+                flow_step = NormalizingFlowStep(cond, norm)
+                inner_steps.append(flow_step)
+            flow = FCNormalizingFlow(inner_steps, None)
+            flow.img_sizes = img_sizes[i]
+            outter_steps.append(flow)
+
+        return CNNormalizingFlow(outter_steps, NormalLogDensity(), dropping_factors)
+    elif len(nb_inner_steps) == 1:
+        inner_steps = []
+        for step in range(nb_inner_steps[0]):
+            emb_s = 2 if normalizer_type is AffineNormalizer else 30
+            # TODO ADD pixel position
+            in_s = (prior_kernel * 2 + 1) ** 2 - 1
+            hidden = MLP(in_d=in_s, hidden=[in_s * 4, in_s * 4], out_d=emb_s)
+            A_prior = MNIST_A_prior(28, prior_kernel)
+
+            # Computing the mask indices, filled with zero when the number of indices is smaller than the size.
+            sub_mask = torch.zeros(A_prior.shape[0], (prior_kernel * 2 + 1) ** 2 - 1).int()
+            for pix in range(A_prior.shape[0]):
+                idx = torch.nonzero(A_prior[pix, :]).int().view(-1)
+                if idx.shape[0] < sub_mask.shape[1]:
+                    idx = torch.cat((idx.int(), torch.zeros(sub_mask.shape[1] - idx.shape[0]).int()))
+                sub_mask[pix, :] = idx
+
+            cond = SubDAGConditioner(1*28*28, hidden, emb_s, l1=l1, nb_epoch_update=nb_epoch_update,
+                                     hot_encoding=hot_encoding, A_prior=A_prior, sub_mask=sub_mask.long())
+            if normalizer_type is MonotonicNormalizer:
+                #emb_s = 30 + 28*28 if hot_encoding else 30
+                emb_s = 30 + 2 if hot_encoding else 30
+
+                norm = normalizer_type(**normalizer_args, cond_size=emb_s)
+            else:
+                norm = normalizer_type(**normalizer_args)
             flow_step = NormalizingFlowStep(cond, norm)
             inner_steps.append(flow_step)
         flow = FCNormalizingFlow(inner_steps, NormalLogDensity())
