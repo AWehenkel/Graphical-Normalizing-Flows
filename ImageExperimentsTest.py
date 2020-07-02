@@ -192,7 +192,7 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
     for normalizer in model.module.getNormalizers():
         if type(normalizer) is MonotonicNormalizer:
             print(normalizer.nb_steps)
-            normalizer.nb_steps = 250
+            normalizer.nb_steps = 15
 
     # ----------------------- Valid Loop ------------------------- #
     if False:

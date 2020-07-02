@@ -175,10 +175,8 @@ class DAGConditioner(Conditioner):
         return
 
     def get_power_trace(self):
-        print("ici")
         alpha = min(1., self.alpha)
         alpha *= self.alpha_factor
-        print(alpha, self.in_size)
         if self.hutchinson != 0:
             h_iter = self.hutchinson
             trace = 0.
@@ -193,7 +191,6 @@ class DAGConditioner(Conditioner):
             return trace / h_iter - self.in_size
 
         B = (torch.eye(self.in_size, device=self.A.device) + alpha * self.A ** 2)
-        print(B.norm(), self.exponent)
         M = torch.matrix_power(B, self.exponent)
         return torch.diag(M).sum() - self.in_size
 

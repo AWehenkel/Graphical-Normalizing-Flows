@@ -115,7 +115,8 @@ cond_types = {"DAG": DAGConditioner, "Coupling": CouplingConditioner, "Autoregre
 def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000, b_size=100,
           int_net=[50, 50, 50], all_args=None, file_number=None, train=True, solver="CC", weight_decay=1e-5,
           learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine', nb_flow=[1], hot_encoding=True,
-          prior_A_kernel=None, conditioner="DAG", emb_net=None, load_A=False, A_dir=None, sub_DAG=False):
+          prior_A_kernel=None, conditioner="DAG", emb_net=None, load_A=False, A_dir=None, sub_DAG=False,
+          UFlow=False):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -148,7 +149,15 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     if conditioner == "DAG":
         conditioner_type = DAGConditioner
         if dataset == "MNIST":
-            if sub_DAG:
+            if UFlow:
+                inner_model = buildMNISTUFlow(normalizer_type, normalizer_args, hot_encoding=hot_encoding,
+                                                        nb_epoch_update=nb_step_dual)
+
+                x = torch.randn(1, 784)
+                z, jac = inner_model(x)
+                exit()
+                #x_inv = inner_model.invert()
+            elif sub_DAG:
                 inner_model = buildSubMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
                                                         nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
                                                         prior_kernel=prior_A_kernel)
@@ -273,7 +282,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                 bpp_test /= batch_idx + 1
                 logger.info("epoch: {:d} - Test log-likelihood: {:4f} - Test BPP {:4f} - <<DAGness>>: {:4f}".
                             format(epoch, ll_test, bpp_test, dagness))
-            if epoch % 10 == 0 and conditioner_type is DAGConditioner:
+            if epoch % 10 == 0 and issubclass(conditioner_type, DAGConditioner):
                 stoch_gate, noise_gate, s_thresh = [], [], []
                 for conditioner in model.module.getConditioners():
                     stoch_gate.append(conditioner.stoch_gate)
@@ -403,6 +412,7 @@ parser.add_argument("-conditioner", default='DAG', choices=['DAG', 'Coupling', '
 parser.add_argument("-emb_net", default=[100, 100, 100, 10], nargs="+", type=int, help="NN layers of embedding")
 
 parser.add_argument("-sub_DAG", default=False, action="store_true")
+parser.add_argument("-UFlow", default=False, action="store_true")
 
 args = parser.parse_args()
 from datetime import datetime
@@ -417,4 +427,4 @@ train(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_step
       solver=args.solver, train=not args.test, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
       batch_per_optim_step=args.batch_per_optim_step, n_gpu=args.nb_gpus, hot_encoding=not args.no_hot_encoding,
       prior_A_kernel=args.prior_A_kernel, conditioner=args.conditioner, emb_net=args.emb_net, load_A=args.load_A,
-      A_dir=args.A_dir, sub_DAG=args.sub_DAG)
+      A_dir=args.A_dir, sub_DAG=args.sub_DAG, UFlow=args.UFlow)

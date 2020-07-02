@@ -70,7 +70,7 @@ class NormalizingFlowStep(NormalizingFlow):
         return z, torch.log(jac).sum(1)
 
     def constraintsLoss(self):
-        if type(self.conditioner) is DAGConditioner:
+        if issubclass(type(self.conditioner), DAGConditioner):
             return self.conditioner.loss()
         return 0.
 
