@@ -6,4 +6,5 @@ networkx==2.4
 pandas
 PyYAML==5.3.1
 scikit-learn
+matplotlib
 

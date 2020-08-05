@@ -90,6 +90,7 @@ class DAGConditioner(Conditioner):
         self.A *= 1. - torch.eye(self.in_size, device=self.A.device)
         self.A.requires_grad = False
         self.A.grad = None
+        self.is_invertible = True
 
     def stochastic_gate(self, importance):
         if self.gumble:
@@ -124,6 +125,7 @@ class DAGConditioner(Conditioner):
         return self.A**2 * (self.A**2 > self.h_thresh).float()
 
     def forward(self, x, context=None):
+        b_size = x.shape[0]
         if self.h_thresh > 0:
             if self.stoch_gate:
                 e = (x.unsqueeze(1).expand(-1, self.in_size, -1) * self.stochastic_gate(self.hard_thresholded_A().unsqueeze(0)
@@ -160,7 +162,9 @@ class DAGConditioner(Conditioner):
             indices = torch.arange(width, device=self.A.device).unsqueeze(0).expand(width, -1).contiguous()
             mesh = torch.cat((indices.view(-1, 1), indices.T.contiguous().view(-1, 1)), 1).float()/width
             pos_encoding = mesh.unsqueeze(0).expand(x.shape[0], -1, -1).contiguous().view(-1, 2)
-            e = self.embedding_net(e)
+            if context is not None:
+                context = context.unsqueeze(1).expand(-1, self.in_size, -1).reshape(b_size*self.in_size, -1)
+            e = self.embedding_net(e, context)
             #full_e = torch.cat((e, hot_encoding), 1).view(x.shape[0], self.in_size, -1)
             full_e = torch.cat((e, pos_encoding), 1).view(x.shape[0], self.in_size, -1)
 
@@ -261,7 +265,7 @@ class DAGConditioner(Conditioner):
         return lag_const
 
     def depth(self):
-        G = nx.from_numpy_matrix((self.A.detach() > 0).float().cpu().numpy(), create_using=nx.DiGraph)
+        G = nx.from_numpy_matrix(self.A.detach().cpu().numpy() ** 2, create_using=nx.DiGraph)
         if self.is_invertible or nx.is_directed_acyclic_graph(G):
             return int(nx.dag_longest_path_length(G))
         return 0

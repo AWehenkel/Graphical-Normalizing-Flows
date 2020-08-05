@@ -4,8 +4,9 @@ from .Normalizers import *
 from .Conditionners import *
 from .NormalizingFlow import NormalizingFlowStep, FCNormalizingFlow, CNNormalizingFlow
 from math import pi
-from .MLP import MNISTCNN, CIFAR10CNN, MLP
-from .UFlow import UFlow
+from .MLP import MNISTCNN, CIFAR10CNN, MLP, SubMNISTCNN
+from .UFlow import UFlow, ImprovedUFlow
+
 
 class NormalLogDensity(nn.Module):
     def __init__(self):
@@ -184,6 +185,9 @@ def buildSubMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_arg
             # TODO ADD pixel position
             in_s = (prior_kernel * 2 + 1) ** 2 - 1
             hidden = MLP(in_d=in_s, hidden=[in_s * 4, in_s * 4], out_d=emb_s)
+
+            #hidden = SubMNISTCNN(fc_l=[16, 50], size_img=[1, 5, 5], out_d=emb_s)
+
             A_prior = MNIST_A_prior(28, prior_kernel)
 
             # Computing the mask indices, filled with zero when the number of indices is smaller than the size.
@@ -212,10 +216,9 @@ def buildSubMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_arg
 
 
 def buildMNISTUFlow(normalizer_type, normalizer_args, prior_kernel=2, hot_encoding=False,
-                                                        nb_epoch_update=10):
+                                                        nb_epoch_update=10, nb_inner_steps=[1, 1, 1]):
     img_sizes = [[1, 28, 28], [1, 14, 14], [1, 7, 7]]
     dropping_factors = [[1, 2, 2], [1, 2, 2], [1, 1, 1]]
-    nb_inner_steps = [1, 1, 1]
     nb_epoch_update = [10, 25, 50]
 
     enc_outter_steps = []
@@ -225,7 +228,7 @@ def buildMNISTUFlow(normalizer_type, normalizer_args, prior_kernel=2, hot_encodi
         for step in range(nb_inner_steps[i]):
             emb_s = 2 if normalizer_type is AffineNormalizer else 30
             in_s = (prior_kernel * 2 + 1) ** 2 - 1
-            hidden = MLP(in_d=in_s, hidden=[in_s * 4, in_s * 4], out_d=emb_s)
+            hidden = MLP(in_d=in_s+2, hidden=[in_s * 4, in_s * 4, in_s * 4, in_s * 4], out_d=emb_s)
             A_prior = MNIST_A_prior(img_sizes[i][1], prior_kernel)
 
             # Computing the mask indices, filled with zero when the number of indices is smaller than the size.
@@ -256,7 +259,7 @@ def buildMNISTUFlow(normalizer_type, normalizer_args, prior_kernel=2, hot_encodi
         for step in range(nb_inner_steps[i]):
             emb_s = 2 if normalizer_type is AffineNormalizer else 30
             in_s = (prior_kernel * 2 + 1) ** 2 - 1
-            hidden = MLP(in_d=in_s, hidden=[in_s * 4, in_s * 4], out_d=emb_s)
+            hidden = MLP(in_d=in_s + 2, hidden=[in_s * 4, in_s * 4, in_s * 4, in_s * 4], out_d=emb_s)
             A_prior = MNIST_A_prior(img_sizes[i][1], prior_kernel)
 
             # Computing the mask indices, filled with zero when the number of indices is smaller than the size.
@@ -280,4 +283,90 @@ def buildMNISTUFlow(normalizer_type, normalizer_args, prior_kernel=2, hot_encodi
         flow.img_sizes = img_sizes[i]
         dec_outter_steps.append(flow)
     return UFlow(enc_outter_steps, dec_outter_steps, NormalLogDensity(), dropping_factors)
+
+def buildMNISTIUFlow(normalizer_type, normalizer_args, prior_kernel=2, hot_encoding=False,
+                                                        nb_epoch_update=10, nb_inner_steps=[1, 1, 1]):
+    img_sizes = [[1, 28, 28], [1, 14, 14], [1, 7, 7]]
+    fc_l = [[2304, 128], [400, 64]]
+    dropping_factors = [[1, 2, 2], [1, 2, 2], [1, 1, 1]]
+    nb_epoch_update = [10, 25, 50]
+
+    context_nets = nn.ModuleList()
+    context_size = 20
+    for i in range(2):
+        net = MNISTCNN(out_d=context_size, fc_l=fc_l[i], size_img=img_sizes[i])
+        context_nets.append(net)
+
+    enc_outter_steps = []
+    for i in range(3):
+        in_size = img_sizes[i][0] * img_sizes[i][1] * img_sizes[i][2]
+        inner_steps = []
+        for step in range(nb_inner_steps[i]):
+            emb_s = 2 if normalizer_type is AffineNormalizer else 30
+            # TODO REMOVE
+            if i == 2:
+                emb_s = 30
+            in_s = (prior_kernel * 2 + 1) ** 2 - 1
+            in_s_mlp = in_s + 2 if i == 0 else in_s + context_size + 2
+            hidden = MLP(in_d=in_s_mlp, hidden=[in_s * 4, in_s * 4, in_s * 4], out_d=emb_s)
+            A_prior = MNIST_A_prior(img_sizes[i][1], prior_kernel)
+
+            # Computing the mask indices, filled with zero when the number of indices is smaller than the size.
+            sub_mask = torch.zeros(A_prior.shape[0], (prior_kernel*2+1)**2 - 1).int()
+            for pix in range(A_prior.shape[0]):
+                idx = torch.nonzero(A_prior[pix, :]).int().view(-1)
+                if idx.shape[0] < sub_mask.shape[1]:
+                    idx = torch.cat((idx.int(), torch.zeros(sub_mask.shape[1] - idx.shape[0]).int()))
+                sub_mask[pix, :] = idx
+
+            cond = SubDAGConditioner(in_size, hidden, emb_s, l1=0., nb_epoch_update=nb_epoch_update[i], hot_encoding=hot_encoding,
+                                     A_prior=A_prior, sub_mask=sub_mask.long())
+            if normalizer_type is MonotonicNormalizer:
+                emb_s = 30 + 2 if hot_encoding else 30
+                norm = normalizer_type(**normalizer_args, cond_size=emb_s)
+            else:
+                norm = normalizer_type(**normalizer_args)
+
+            # TODO REMOVE
+            if i == 2:
+                emb_s = 30 + 2 if hot_encoding else 30
+                norm_args = {"integrand_net": [50, 50, 50], "nb_steps": 15, "solver": "CC"}
+                norm = MonotonicNormalizer(**norm_args, cond_size=emb_s)
+            flow_step = NormalizingFlowStep(cond, norm)
+            inner_steps.append(flow_step)
+        flow = FCNormalizingFlow(inner_steps, None)
+        flow.img_sizes = img_sizes[i]
+        enc_outter_steps.append(flow)
+
+    dec_outter_steps = []
+    for i in range(2, -1, -1):
+        in_size = img_sizes[i][0] * img_sizes[i][1] * img_sizes[i][2]
+        inner_steps = []
+        for step in range(nb_inner_steps[i]):
+            emb_s = 2 if normalizer_type is AffineNormalizer else 30
+            in_s = (prior_kernel * 2 + 1) ** 2 - 1
+            hidden = MLP(in_d=in_s + 2, hidden=[in_s * 4, in_s * 4, in_s * 4], out_d=emb_s)
+            A_prior = MNIST_A_prior(img_sizes[i][1], prior_kernel)
+
+            # Computing the mask indices, filled with zero when the number of indices is smaller than the size.
+            sub_mask = torch.zeros(A_prior.shape[0], (prior_kernel * 2 + 1) ** 2 - 1).int()
+            for pix in range(A_prior.shape[0]):
+                idx = torch.nonzero(A_prior[pix, :]).int().view(-1)
+                if idx.shape[0] < sub_mask.shape[1]:
+                    idx = torch.cat((idx.int(), torch.zeros(sub_mask.shape[1] - idx.shape[0]).int()))
+                sub_mask[pix, :] = idx
+
+            cond = SubDAGConditioner(in_size, hidden, emb_s, l1=0., nb_epoch_update=nb_epoch_update[i], hot_encoding=hot_encoding,
+                                     A_prior=A_prior, sub_mask=sub_mask.long())
+            if normalizer_type is MonotonicNormalizer:
+                emb_s = 30 + 2 if hot_encoding else 30
+                norm = normalizer_type(**normalizer_args, cond_size=emb_s)
+            else:
+                norm = normalizer_type(**normalizer_args)
+            flow_step = NormalizingFlowStep(cond, norm)
+            inner_steps.append(flow_step)
+        flow = FCNormalizingFlow(inner_steps, None)
+        flow.img_sizes = img_sizes[i]
+        dec_outter_steps.append(flow)
+    return ImprovedUFlow(enc_outter_steps, dec_outter_steps, NormalLogDensity(), dropping_factors, context_nets)
 

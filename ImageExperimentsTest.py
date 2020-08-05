@@ -7,7 +7,7 @@ from torchvision import datasets, transforms
 from lib.transform import AddUniformNoise, ToTensor, HorizontalFlip, Transpose, Resize
 import numpy as np
 import torch.nn as nn
-from models.NormalizingFlowFactories import buildMNISTNormalizingFlow, buildCIFAR10NormalizingFlow, buildFCNormalizingFlow
+from models.NormalizingFlowFactories import *
 from models.Normalizers import AffineNormalizer, MonotonicNormalizer
 from models.Conditionners import *
 import torchvision.datasets as dset
@@ -112,7 +112,8 @@ cond_types = {"DAG": DAGConditioner, "Coupling": CouplingConditioner, "Autoregre
 def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=.1, nb_epoch=10000, b_size=100,
           int_net=[50, 50, 50], all_args=None, file_number=None, train=True, solver="CC", weight_decay=1e-5,
           learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine', nb_flow=[1], hot_encoding=True,
-          prior_A_kernel=None, conditioner="DAG", emb_net=None):
+          prior_A_kernel=None, conditioner="DAG", emb_net=None, load_A=False, A_dir=None, sub_DAG=False,
+          UFlow=False, outter_steps=1):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -144,9 +145,18 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
 
     if conditioner == "DAG":
         if dataset == "MNIST":
-            inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
-                                                    nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
-                                                    prior_kernel=prior_A_kernel)
+            if UFlow:
+                inner_model = buildMNISTUFlow(normalizer_type, normalizer_args, hot_encoding=hot_encoding,
+                                              nb_epoch_update=nb_step_dual)
+
+            elif sub_DAG:
+                inner_model = buildSubMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
+                                                           nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
+                                                           prior_kernel=prior_A_kernel)
+            else:
+                inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
+                                                        nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
+                                                        prior_kernel=prior_A_kernel)
         elif dataset == "CIFAR10":
             inner_model = buildCIFAR10NormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
                                                       nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding)
@@ -183,7 +193,7 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
     if load:
         with torch.no_grad():
             for conditioner in model.module.getConditioners():
-                if type(conditioner) is DAGConditioner:
+                if issubclass(type(conditioner), DAGConditioner):
                     print(model.module.DAGness())
                     plt.matshow(conditioner.A.detach().numpy())
                     plt.savefig(path + "/test.pdf")
@@ -193,6 +203,13 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
         if type(normalizer) is MonotonicNormalizer:
             print(normalizer.nb_steps)
             normalizer.nb_steps = 15
+
+    z = torch.randn(1, 784)
+    x = inner_model(z)[0]
+    print(z.shape)
+    x_inv = inner_model.invert(z)
+    print(torch.norm(x - x_inv))
+    #exit()
 
     # ----------------------- Valid Loop ------------------------- #
     if False:
@@ -242,7 +259,7 @@ def test(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1=
 
 
     # Plot of the adjacency Matrix
-    if True:
+    if False:
         for i_cond, conditioner in enumerate(model.module.getConditioners()):
             # Video of the conditioning Matrix
             in_s = conditioner.in_size if dataset == "MNIST" else 3 * 32 * 32
@@ -346,9 +363,14 @@ parser.add_argument("-dataset", default="MNIST", type=str, choices=["MNIST", "CI
 parser.add_argument("-normalizer", default="Affine", type=str, choices=["Affine", "Monotonic"])
 parser.add_argument("-no_hot_encoding", default=False, action="store_true")
 parser.add_argument("-prior_A_kernel", default=None, type=int)
-
+parser.add_argument("-load_A", default=False, action="store_true")
+parser.add_argument("-A_dir", default=None, type=str)
 parser.add_argument("-conditioner", default='DAG', choices=['DAG', 'Coupling', 'Autoregressive'], type=str)
 parser.add_argument("-emb_net", default=[100, 100, 100, 10], nargs="+", type=int, help="NN layers of embedding")
+
+parser.add_argument("-sub_DAG", default=False, action="store_true")
+parser.add_argument("-UFlow", default=False, action="store_true")
+parser.add_argument("-outter_steps", default=1, type=int)
 
 args = parser.parse_args()
 from datetime import datetime
@@ -362,4 +384,5 @@ test(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_steps
       nb_steps=args.nb_steps, file_number=args.f_number, norm_type=args.normalizer,
       solver=args.solver, train=not args.test, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
       batch_per_optim_step=args.batch_per_optim_step, n_gpu=args.nb_gpus, hot_encoding=not args.no_hot_encoding,
-      prior_A_kernel=args.prior_A_kernel, conditioner=args.conditioner, emb_net=args.emb_net)
+      prior_A_kernel=args.prior_A_kernel, conditioner=args.conditioner, emb_net=args.emb_net, load_A=args.load_A,
+      A_dir=args.A_dir, sub_DAG=args.sub_DAG, UFlow=args.UFlow, outter_steps=args.outter_steps)

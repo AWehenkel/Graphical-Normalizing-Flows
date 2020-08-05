@@ -18,6 +18,8 @@ class MLP(nn.Module):
         self.net = nn.Sequential(*layers)
 
     def forward(self, x, context=None):
+        if context is not None:
+            x = torch.cat((x, context), 1)
         return self.net(x)
 
 
@@ -26,6 +28,33 @@ class MNISTCNN(nn.Module):
         super(MNISTCNN, self).__init__()
         self.conv1 = nn.Conv2d(size_img[0], 16, 3, 1)
         self.conv2 = nn.Conv2d(16, 16, 3, 1)
+        self.dropout1 = nn.Dropout2d(0.25)
+        self.dropout2 = nn.Dropout2d(0.5)
+        self.fc1 = nn.Linear(fc_l[0], fc_l[1])
+        self.fc2 = nn.Linear(fc_l[1], out_d)
+        self.out_d = out_d
+        self.size_img = size_img
+
+    def forward(self, x, context=None):
+        b_size = x.shape[0]
+        x = self.conv1(x.view(-1, self.size_img[0], self.size_img[1], self.size_img[2]))
+        x = F.relu(x)
+        x = self.conv2(x)
+        x = F.max_pool2d(x, 2)
+        #x = self.dropout1(x)
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = F.relu(x)
+        #x = self.dropout2(x)
+        x = self.fc2(x).view(b_size, -1)
+        return x
+
+
+class SubMNISTCNN(nn.Module):
+    def __init__(self, out_d=10, fc_l=[2304, 128], size_img=[1, 28, 28]):
+        super(SubMNISTCNN, self).__init__()
+        self.conv1 = nn.Conv2d(size_img[0], 16, 2, 1)
+        self.conv2 = nn.Conv2d(16, 16, 2, 1)
         self.dropout1 = nn.Dropout2d(0.25)
         self.dropout2 = nn.Dropout2d(0.5)
         self.fc1 = nn.Linear(fc_l[0], fc_l[1])

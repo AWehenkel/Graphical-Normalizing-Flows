@@ -62,22 +62,23 @@ class SubDAGConditioner(DAGConditioner):
         else:
             e = (x.unsqueeze(1).expand(-1, self.in_size, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))
 
-        if self.hot_encoding:
-            hot_encoding = torch.eye(self.in_size, device=self.A.device).unsqueeze(0).expand(x.shape[0], -1, -1)\
-                .contiguous().view(-1, self.in_size)
-            # TODO CLEAN CODE FOR the positional encoding.
-            width = int(self.in_size**.5)
-            indices = torch.arange(width, device=self.A.device).unsqueeze(0).expand(width, -1).contiguous()
-            mesh = torch.cat((indices.view(-1, 1), indices.T.contiguous().view(-1, 1)), 1).float()/width
-            pos_encoding = mesh.unsqueeze(0).expand(x.shape[0], -1, -1).contiguous().view(-1, 2)
-            mask_size = self.sub_mask.shape[1]
-            e = batched_index_select(e.view(x.shape[0] * self.in_size, -1), 1, self.sub_mask.unsqueeze(0).expand(b_size, -1, -1).contiguous().view(-1, mask_size))
-            e = self.embedding_net(e)
-            #full_e = torch.cat((e, hot_encoding), 1).view(x.shape[0], self.in_size, -1)
-            full_e = torch.cat((e, pos_encoding), 1).view(x.shape[0], self.in_size, -1)
-
-            # TODO Add context
-            return full_e
-
-        return self.embedding_net(e).view(x.shape[0], self.in_size, -1)#.permute(0, 2, 1).contiguous().view(x.shape[0], -1)
-
+        hot_encoding = torch.eye(self.in_size, device=self.A.device).unsqueeze(0).expand(x.shape[0], -1, -1)\
+            .contiguous().view(-1, self.in_size)
+        # TODO CLEAN CODE FOR the positional encoding.
+        width = int(self.in_size**.5)
+        indices = torch.arange(width, device=self.A.device).unsqueeze(0).expand(width, -1).contiguous()
+        mesh = torch.cat((indices.view(-1, 1), indices.T.contiguous().view(-1, 1)), 1).float()/width
+        pos_encoding = mesh.unsqueeze(0).expand(x.shape[0], -1, -1).contiguous().view(-1, 2)
+        mask_size = self.sub_mask.shape[1]
+        e = batched_index_select(e.view(x.shape[0] * self.in_size, -1), 1,
+                                 self.sub_mask.unsqueeze(0).expand(b_size, -1, -1).contiguous().view(-1, mask_size))
+        if context is not None:
+            context = context.unsqueeze(1).expand(-1, self.in_size, -1).reshape(b_size*self.in_size, -1)
+            context = torch.cat((pos_encoding, context), 1)
+            e = self.embedding_net(e, context=context)
+        else:
+            e = self.embedding_net(e, context=pos_encoding)
+        #full_e = torch.cat((e, hot_encoding), 1).view(x.shape[0], self.in_size, -1)
+        full_e = torch.cat((e, pos_encoding), 1).reshape(x.shape[0], self.in_size, -1)
+        # TODO Add context
+        return full_e

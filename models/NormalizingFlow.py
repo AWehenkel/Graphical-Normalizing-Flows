@@ -98,7 +98,6 @@ class NormalizingFlowStep(NormalizingFlow):
     def invert(self, z, context=None):
         x = torch.zeros_like(z)
         for i in range(self.conditioner.depth() + 1):
-            print(i, "/", self.conditioner.depth() + 1)
             h = self.conditioner(x, context)
             x_prev = x
             x = self.normalizer.inverse_transform(z, h, context)
@@ -164,9 +163,11 @@ class FCNormalizingFlow(NormalizingFlow):
         return True
 
     def invert(self, z, context=None):
+        inv_idx = torch.arange(z.shape[1] - 1, -1, -1).long()
         for step in range(len(self.steps)):
-            z = self.steps[-step].invert(z, context)
-        return z
+            x = self.steps[-step - 1].invert(z, context)
+            z = x[:, inv_idx]
+        return x
 
 
 class CNNormalizingFlow(FCNormalizingFlow):
@@ -225,3 +226,36 @@ class CNNormalizingFlow(FCNormalizingFlow):
             x = step.invert(z.view(b_size, -1), context)
         return x
 
+
+class FixedScalingStep(NormalizingFlow):
+    def __init__(self, mu, std):
+        super(FixedScalingStep, self).__init__()
+        self.mu = mu
+        self.std = std
+
+    def forward(self, x, context=None):
+        z = (x - self.mu.unsqueeze(0).expand(x.shape[0], -1))/self.std.unsqueeze(0).expand(x.shape[0], -1)
+        jac = self.std.unsqueeze(0).expand(x.shape[0], -1)
+        return z, -torch.log(jac).sum(1)
+
+    def constraintsLoss(self):
+        return 0.
+
+    def DAGness(self):
+        return [0.]
+
+    def step(self, epoch_number, loss_avg):
+        return
+
+    def getConditioners(self):
+        return []
+
+    def getNormalizers(self):
+        return []
+
+    def isInvertible(self):
+        return True
+
+    def invert(self, z, context=None):
+        x = z * self.std.unsqueeze(0).expand(z.shape[0], -1) + self.mu.unsqueeze(0).expand(z.shape[0], -1)
+        return x

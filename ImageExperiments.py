@@ -6,7 +6,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import networkx as nx
 from torchvision import datasets, transforms
-from lib.transform import AddUniformNoise, ToTensor, HorizontalFlip, Transpose, Resize
+from lib.transform import AddUniformNoise, ToTensor, HorizontalFlip, Transpose, Resize, logit_back
 import numpy as np
 import math
 import torch.nn as nn
@@ -14,6 +14,7 @@ from UMNN import UMNNMAFFlow
 from models.NormalizingFlowFactories import *
 from models.Normalizers import AffineNormalizer, MonotonicNormalizer
 from models.Conditionners import *
+from models.NormalizingFlow import FixedScalingStep
 import torchvision.datasets as dset
 import torchvision.transforms as tforms
 import matplotlib.animation as animation
@@ -36,6 +37,12 @@ def compute_bpp(ll, x, alpha=1e-6):
           + 1 / d * (torch.log2(torch.sigmoid(x)) + torch.log2(1. - torch.sigmoid(x))).sum(1)
     return bpp
 
+
+def compute_bits_per_dim(ll, x):
+    logpx_per_dim = ll.sum() / x.nelement()  # averaged over batches
+    bits_per_dim = -(logpx_per_dim - np.log(256)) / np.log(2)
+
+    return bits_per_dim
 
 def load_data(dataset="MNIST", batch_size=100, cuda=-1):
     if dataset == "MNIST":
@@ -116,7 +123,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
           int_net=[50, 50, 50], all_args=None, file_number=None, train=True, solver="CC", weight_decay=1e-5,
           learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine', nb_flow=[1], hot_encoding=True,
           prior_A_kernel=None, conditioner="DAG", emb_net=None, load_A=False, A_dir=None, sub_DAG=False,
-          UFlow=False):
+          archi_type="Classic", outter_steps=1):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -146,44 +153,63 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
         normalizer_type = MonotonicNormalizer
         normalizer_args = {"integrand_net": int_net, "nb_steps": 15, "solver": solver}
 
-    if conditioner == "DAG":
-        conditioner_type = DAGConditioner
-        if dataset == "MNIST":
-            if UFlow:
-                inner_model = buildMNISTUFlow(normalizer_type, normalizer_args, hot_encoding=hot_encoding,
-                                                        nb_epoch_update=nb_step_dual)
-
-                x = torch.randn(1, 784)
-                z, jac = inner_model(x)
-                exit()
-                #x_inv = inner_model.invert()
-            elif sub_DAG:
-                inner_model = buildSubMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
-                                                        nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
-                                                        prior_kernel=prior_A_kernel)
+    outter_steps_modules = []
+    for i in range(outter_steps):
+        if conditioner == "DAG":
+            conditioner_type = DAGConditioner
+            if dataset == "MNIST":
+                if archi_type == "UFlow":
+                    inner_model = buildMNISTUFlow(normalizer_type, normalizer_args, hot_encoding=hot_encoding,
+                                                            nb_epoch_update=nb_step_dual, nb_inner_steps=nb_flow)
+                elif archi_type == "IUFlow":
+                    inner_model = buildMNISTIUFlow(normalizer_type, normalizer_args, hot_encoding=hot_encoding,
+                                                  nb_epoch_update=nb_step_dual, nb_inner_steps=nb_flow)
+                elif sub_DAG:
+                    inner_model = buildSubMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
+                                                            nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
+                                                            prior_kernel=prior_A_kernel)
+                else:
+                    inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
+                                                            nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
+                                                            prior_kernel=prior_A_kernel)
+            elif dataset == "CIFAR10":
+                inner_model = buildCIFAR10NormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
+                                                          nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding)
             else:
-                inner_model = buildMNISTNormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
-                                                        nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding,
-                                                        prior_kernel=prior_A_kernel)
-        elif dataset == "CIFAR10":
-            inner_model = buildCIFAR10NormalizingFlow(nb_flow, normalizer_type, normalizer_args, l1,
-                                                      nb_epoch_update=nb_step_dual, hot_encoding=hot_encoding)
+                logger.info("Wrong dataset name. Training aborted.")
+                exit()
+            if load_A:
+                with torch.no_grad():
+                    for i, cond in enumerate(inner_model.getConditioners()):
+                        A = torch.load(A_dir + 'A%d.pt' % i).to(master_device)
+                        cond.A.copy_(A)
+                        cond.post_process()
         else:
-            logger.info("Wrong dataset name. Training aborted.")
-            exit()
-        if load_A:
-            with torch.no_grad():
-                for i, cond in enumerate(inner_model.getConditioners()):
-                    A = torch.load(A_dir + 'A%d.pt' % i).to(master_device)
-                    cond.A.copy_(A)
-    else:
-        dim = 28**2 if dataset == "MNIST" else 32*32*3
-        conditioner_type = cond_types[conditioner]
-        conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1]}
-        if norm_type == 'Monotonic':
-            normalizer_args["cond_size"] = emb_net[-1]
+            dim = 28**2 if dataset == "MNIST" else 32*32*3
+            conditioner_type = cond_types[conditioner]
+            conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1]}
+            if norm_type == 'Monotonic':
+                normalizer_args["cond_size"] = emb_net[-1]
 
-        inner_model = buildFCNormalizingFlow(nb_flow[0], conditioner_type, conditioner_args, normalizer_type, normalizer_args)
+            inner_model = buildFCNormalizingFlow(nb_flow[0], conditioner_type, conditioner_args, normalizer_type, normalizer_args)
+        outter_steps_modules.append(inner_model)
+    if outter_steps > 1:
+        inner_model = FCNormalizingFlow(outter_steps_modules, NormalLogDensity())
+    else:
+        inner_model = outter_steps_modules[0]
+
+    # Compute Mean abd std per pixel
+    x_mean = 0
+    x_mean2 = 0
+    for batch_idx, (cur_x, target) in enumerate(train_loader):
+        cur_x = cur_x.view(batch_size, -1).float().to(master_device)
+        x_mean += cur_x.mean(0)
+        x_mean2 += (cur_x ** 2).mean(0)
+    x_mean /= batch_idx + 1
+    x_std = (x_mean2 / (batch_idx + 1) - x_mean ** 2) ** .5
+
+    #inner_model = FCNormalizingFlow([FixedScalingStep(x_mean, x_std), inner_model], NormalLogDensity())
+
     model = nn.DataParallel(inner_model, device_ids=list(range(n_gpu))).to(master_device)
     logger.info(str(model))
     pytorch_total_params = sum(p.numel() for p in model.parameters())
@@ -207,6 +233,37 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     if load:
         for conditioner in model.module.getConditioners():
             conditioner.alpha = conditioner.getAlpha()
+
+    if False:
+        if load:
+            with torch.no_grad():
+                for conditioner in model.module.getConditioners():
+                    if issubclass(type(conditioner), DAGConditioner):
+                        print(model.module.DAGness())
+                        plt.matshow(conditioner.A.detach().numpy())
+                        plt.savefig(path + "/test.pdf")
+                        conditioner.post_process()
+        with torch.no_grad():
+            n_images = 20
+            x = list(train_loader)[0][0].view(batch_size, -1)[:n_images, :]
+            #print(x.shape)
+            z = model(x)[0]
+            print(z.mean(), z.std())
+            x_recon = model.module.invert(z)
+            grid_img = torchvision.utils.make_grid(logit_back(x.view(n_images, 1, 28, 28), alpha), nrow=4)
+            torchvision.utils.save_image(grid_img, path + '/images_real.png')
+            grid_img = torchvision.utils.make_grid(logit_back(x_recon.view(n_images, 1, 28, 28), alpha), nrow=4)
+            torchvision.utils.save_image(grid_img, path + '/images_recon.png')
+            for i in range(15):
+                n_images = 20
+                z = torch.randn(n_images, 784) * 0.1 * i
+                x = model.module.invert(z)
+                print(torch.norm(model(x)[0] - z))
+                grid_img = torchvision.utils.make_grid(logit_back(x.view(n_images, 1, 28, 28), alpha), nrow=4)
+                torchvision.utils.save_image(grid_img, path + '/images%d.png' % i)
+        #plt.show()
+        #exit()
+
 
     # ----------------------- Main Loop ------------------------- #
     for epoch in range(nb_epoch):
@@ -316,48 +373,48 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
 
 
+                if False:
+                    in_s = 784 if dataset == "MNIST" else 3*32*32
+                    a_tmp = model.module.getConditioners()[0].soft_thresholded_A()[0, :]
+                    a_tmp = a_tmp.view(28, 28).cpu().numpy() if dataset == "MNIST" else a_tmp.view(3, 32, 32).cpu().numpy()
+                    fig, ax = plt.subplots()
+                    mat = ax.matshow(a_tmp)
+                    plt.colorbar(mat)
+                    current_cmap = matplotlib.cm.get_cmap()
+                    current_cmap.set_bad(color='red')
+                    mat.set_clim(0, 1.)
+                    def update(i):
+                        A = model.module.getConditioners()[0].soft_thresholded_A()[i, :].cpu().numpy()
+                        A[i] = np.nan
+                        if dataset == "MNIST":
+                            A = A.reshape(28, 28)
+                        elif dataset == "CIFAR10":
+                            A = A.reshape(3, 32, 32)
+                        mat.set_data(A)
+                        return mat
 
-                in_s = 784 if dataset == "MNIST" else 3*32*32
-                a_tmp = model.module.getConditioners()[0].soft_thresholded_A()[0, :]
-                a_tmp = a_tmp.view(28, 28).cpu().numpy() if dataset == "MNIST" else a_tmp.view(3, 32, 32).cpu().numpy()
-                fig, ax = plt.subplots()
-                mat = ax.matshow(a_tmp)
-                plt.colorbar(mat)
-                current_cmap = matplotlib.cm.get_cmap()
-                current_cmap.set_bad(color='red')
-                mat.set_clim(0, 1.)
-                def update(i):
-                    A = model.module.getConditioners()[0].soft_thresholded_A()[i, :].cpu().numpy()
-                    A[i] = np.nan
+                    # Set up formatting for the movie files
+                    Writer = animation.writers['ffmpeg']
+                    writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+                    ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
+                    ani.save(path + '/A_epoch_%d.mp4' % epoch, writer=writer)
+
+                    deg_out = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(0).cpu().numpy()
+                    deg_in = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(1).cpu().numpy()
+                    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
                     if dataset == "MNIST":
-                        A = A.reshape(28, 28)
+                        shape = (28, 28)
                     elif dataset == "CIFAR10":
-                        A = A.reshape(3, 32, 32)
-                    mat.set_data(A)
-                    return mat
+                        shape = (3, 32, 32)
+                    res0 = ax[0].matshow(np.log(deg_in).reshape(shape))
+                    ax[0].set(title="In degrees")
+                    fig.colorbar(res0, ax=ax[0])
+                    res1 = ax[1].matshow(np.log(deg_out.reshape(shape)))
+                    ax[1].set(title="Out degrees")
+                    fig.colorbar(res1, ax=ax[1])
+                    plt.savefig(path + '/A_degrees_epoch_%d.png' % epoch)
 
-                # Set up formatting for the movie files
-                Writer = animation.writers['ffmpeg']
-                writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
-                ani = animation.FuncAnimation(fig, update, range(in_s), interval=100, save_count=0)
-                ani.save(path + '/A_epoch_%d.mp4' % epoch, writer=writer)
-
-                deg_out = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(0).cpu().numpy()
-                deg_in = (model.module.getConditioners()[0].soft_thresholded_A() > 0.).sum(1).cpu().numpy()
-                fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-                if dataset == "MNIST":
-                    shape = (28, 28)
-                elif dataset == "CIFAR10":
-                    shape = (3, 32, 32)
-                res0 = ax[0].matshow(np.log(deg_in).reshape(shape))
-                ax[0].set(title="In degrees")
-                fig.colorbar(res0, ax=ax[0])
-                res1 = ax[1].matshow(np.log(deg_out.reshape(shape)))
-                ax[1].set(title="Out degrees")
-                fig.colorbar(res1, ax=ax[1])
-                plt.savefig(path + '/A_degrees_epoch_%d.png' % epoch)
-
-            if model.module.isInvertible():
+            if model.module.isInvertible() and epoch % 10 == 0:
                 with torch.no_grad():
                     n_images = 16
                     in_s = 28**2
@@ -365,7 +422,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                         z = torch.randn(n_images, in_s).to(device=master_device) * T
                         x = model.module.invert(z)
                         print((z - model(x)[0]).abs().mean())
-                        grid_img = torchvision.utils.make_grid(x.view(n_images, 1, 28, 28), nrow=4)
+                        grid_img = torchvision.utils.make_grid(logit_back(x.view(n_images, 1, 28, 28), alpha), nrow=4)
                         torchvision.utils.save_image(grid_img, path + '/images_%d_%f.png' % (epoch, T))
 
             if epoch % nb_step_dual == 0:
@@ -412,7 +469,8 @@ parser.add_argument("-conditioner", default='DAG', choices=['DAG', 'Coupling', '
 parser.add_argument("-emb_net", default=[100, 100, 100, 10], nargs="+", type=int, help="NN layers of embedding")
 
 parser.add_argument("-sub_DAG", default=False, action="store_true")
-parser.add_argument("-UFlow", default=False, action="store_true")
+parser.add_argument("-archi_type", default="UFlow", choices=["UFlow", "Classic", "IUFlow"])
+parser.add_argument("-outter_steps", default=1, type=int)
 
 args = parser.parse_args()
 from datetime import datetime
@@ -427,4 +485,4 @@ train(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_step
       solver=args.solver, train=not args.test, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
       batch_per_optim_step=args.batch_per_optim_step, n_gpu=args.nb_gpus, hot_encoding=not args.no_hot_encoding,
       prior_A_kernel=args.prior_A_kernel, conditioner=args.conditioner, emb_net=args.emb_net, load_A=args.load_A,
-      A_dir=args.A_dir, sub_DAG=args.sub_DAG, UFlow=args.UFlow)
+      A_dir=args.A_dir, sub_DAG=args.sub_DAG, archi_type=args.archi_type, outter_steps=args.outter_steps)
