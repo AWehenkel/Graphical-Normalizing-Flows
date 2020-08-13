@@ -40,10 +40,10 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     dim = x.shape[1]
     print(x_mu.shape)
 
-    norm_type = "Affine"
+    norm_type = "Monotonic"
     save_name = norm_type + str(emb_net) + str(nb_flow)
     solver = "CCParallel"
-    int_net = [100, 100, 100]
+    int_net = [100, 100, 100, 100]
 
     conditioner_type = cond_types[cond_type]
     print(dim)
