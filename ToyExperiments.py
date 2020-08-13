@@ -20,7 +20,7 @@ cond_types = {"DAG": DAGConditioner, "Coupling": CouplingConditioner, "Autoregre
 norm_types = {"Affine": AffineNormalizer, "Monotonic": MonotonicNormalizer}
 
 def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., nb_epoch=20000, pre_heating_epochs=10,
-              nb_flow=1, cond_type = "DAG", emb_net = [50, 50, 50, 30]):
+              nb_flow=1, cond_type = "DAG", emb_net = [150, 150, 150, 30]):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -108,7 +108,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
 
 
-        if epoch % 100 == 0:
+        if epoch % 1000 == 0:
                 with torch.no_grad():
                     plt.matshow(model.getConditioners()[0].A.detach().cpu().numpy())
                     plt.colorbar()

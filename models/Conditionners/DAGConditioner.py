@@ -27,7 +27,7 @@ class DAGConditioner(Conditioner):
                  hot_encoding=False, l1=0., nb_epoch_update=1, A_prior=None):
         super(DAGConditioner, self).__init__()
         if A_prior is None:
-            self.A = nn.Parameter(torch.ones(in_size, in_size) * .5 + torch.randn((in_size, in_size)) * .02)
+            self.A = nn.Parameter(torch.ones(in_size, in_size) * 1. + torch.randn((in_size, in_size)) * .02)
         else:
             self.A = nn.Parameter(A_prior)
         self.in_size = in_size
