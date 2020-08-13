@@ -151,7 +151,7 @@ class ImprovedUFlow(FCNormalizingFlow):
             full_contexts += [torch.cat((local_context, context), 1) if context is not None else local_context]
 
 
-        x = self.enc_steps[-1].invert(z.view(b_size, -1), context).view(z.shape)
+        x = self.enc_steps[-1].invert(z.view(b_size, -1), full_contexts[-1]).view(z.shape)
         for step, gath_factors, z, full_context in zip(self.enc_steps[::-1][1:], self.dec_gathering_factors[1:], z_all[::-1], full_contexts[::-1][1:]):
             d_c, d_h, d_w = gath_factors
             C, H, W = step.img_sizes

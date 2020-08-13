@@ -222,7 +222,18 @@ def inf_train_gen(data, rng=None, batch_size=200):
         x1 = torch.distributions.Normal(0., 1.).sample((batch_size, 1)) + (x2**2)/4
 
         return torch.cat((x1, x2), 1)
+    elif data == "woodStructural":
+        z0 = torch.distributions.log_normal.LogNormal(5., 1., validate_args=None).sample((batch_size, 1))
+        z1 = torch.distributions.log_normal.LogNormal(-2., 1., validate_args=None).sample((batch_size, 1))
+        z2 = torch.randn(batch_size, 1) * .1 + torch.tanh(z0 + z1 - 2.8)
+        z3 = torch.randn(batch_size, 1) * .1 + z0 * z1
+        z4 = torch.randn(batch_size, 1) * 2 + 7
+        z5 = torch.randn(batch_size, 1) * .1 + torch.tanh(z3 + z4)
+        x0 = torch.randn(batch_size, 1) * .1 + z3
+        x1 = torch.randn(batch_size, 1) * .1 + z5
+        return torch.cat((z0, z1, z2, z3, z4, z5, x0, x1), 1)
     else:
         return inf_train_gen("8gaussians", rng, batch_size)
+
 
 

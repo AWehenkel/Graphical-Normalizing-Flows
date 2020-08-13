@@ -10,4 +10,4 @@ args=("$@")
 supp_args=$(printf "%s "  "${args[@]:1}")
 
 source activate UMNN
-python ImageExperiments.py -dataset $1 -nb_gpus 2 $supp_args
+python ImageExperiments.py -dataset $1 -nb_gpus 2 $supp_args -dataset_root /scratch/users/$USER

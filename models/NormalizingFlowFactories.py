@@ -216,7 +216,7 @@ def buildSubMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_arg
 
 
 def buildMNISTUFlow(normalizer_type, normalizer_args, prior_kernel=2, hot_encoding=False,
-                                                        nb_epoch_update=10, nb_inner_steps=[1, 1, 1]):
+                                                        nb_epoch_update=10, nb_inner_steps=[1, 1, 1], emb_net=None):
     img_sizes = [[1, 28, 28], [1, 14, 14], [1, 7, 7]]
     dropping_factors = [[1, 2, 2], [1, 2, 2], [1, 1, 1]]
     nb_epoch_update = [10, 25, 50]
@@ -228,7 +228,8 @@ def buildMNISTUFlow(normalizer_type, normalizer_args, prior_kernel=2, hot_encodi
         for step in range(nb_inner_steps[i]):
             emb_s = 2 if normalizer_type is AffineNormalizer else 30
             in_s = (prior_kernel * 2 + 1) ** 2 - 1
-            hidden = MLP(in_d=in_s+2, hidden=[in_s * 4, in_s * 4, in_s * 4, in_s * 4], out_d=emb_s)
+            hidden_l = emb_net if emb_net[:-1] is not None else [in_s * 4, in_s * 4, in_s * 4, in_s * 4]
+            hidden = MLP(in_d=in_s+2, hidden=hidden_l, out_d=emb_s)
             A_prior = MNIST_A_prior(img_sizes[i][1], prior_kernel)
 
             # Computing the mask indices, filled with zero when the number of indices is smaller than the size.

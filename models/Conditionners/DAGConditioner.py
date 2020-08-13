@@ -16,7 +16,9 @@ class DAGMLP(nn.Module):
         layers.pop()
         self.net = nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x, context=None):
+        if context is not None:
+            x = torch.cat((x, context), 1)
         return self.net(x)
 
 
@@ -25,7 +27,7 @@ class DAGConditioner(Conditioner):
                  hot_encoding=False, l1=0., nb_epoch_update=1, A_prior=None):
         super(DAGConditioner, self).__init__()
         if A_prior is None:
-            self.A = nn.Parameter(torch.ones(in_size, in_size) * 1.5 + torch.randn((in_size, in_size)) * .02)
+            self.A = nn.Parameter(torch.ones(in_size, in_size) * .5 + torch.randn((in_size, in_size)) * .02)
         else:
             self.A = nn.Parameter(A_prior)
         self.in_size = in_size
@@ -34,7 +36,8 @@ class DAGConditioner(Conditioner):
         self.h_thresh = h_thresh
         self.stoch_gate = True
         self.noise_gate = False
-        in_net = in_size*2 if hot_encoding else in_size
+        in_net = in_size if hot_encoding else in_size
+        print(in_net)
         if issubclass(type(hidden), nn.Module):
             self.embedding_net = hidden
         else:
@@ -154,7 +157,7 @@ class DAGConditioner(Conditioner):
             e = (x.unsqueeze(1).expand(-1, self.in_size, -1) * self.A.unsqueeze(0).expand(x.shape[0], -1, -1))\
                 .view(x.shape[0] * self.in_size, -1)
 
-        if self.hot_encoding:
+        if self.hot_encoding and False:
             hot_encoding = torch.eye(self.in_size, device=self.A.device).unsqueeze(0).expand(x.shape[0], -1, -1)\
                 .contiguous().view(-1, self.in_size)
             # TODO CLEAN CODE FOR the positional encoding.
@@ -276,10 +279,10 @@ class DAGConditioner(Conditioner):
         return loss
 
     def step(self, epoch_number, loss_avg=0.):
-        if self.A.requires_grad:
+        if self.A.requires_grad and False:
             print(self.alpha, self.A.max(), self.A.min(), self.A.mean(), self.A.requires_grad, self.A.grad.mean(),
                   self.A.grad.max(), self.A.grad.min(), self.A.grad.std(), self.getAlpha(), self.dag_const, flush=True)
-        else:
+        elif False:
             print(self.A.requires_grad, self.getAlpha(), self.dag_const, flush=True)
         with torch.no_grad():
             lag_const = self.get_power_trace()
@@ -287,8 +290,6 @@ class DAGConditioner(Conditioner):
                 self.exponent -= 5
                 self.exponent = self.exponent if self.exponent > 3 else 3
             if epoch_number % self.nb_epoch_update == 0 and epoch_number > 0:
-                if self.in_size < 30:
-                    print(self.soft_thresholded_A(), flush=True)
                 if self.loss().abs() < loss_avg.abs()/2 or self.no_update > 10:
                     print("Update param", flush=True)
                     self.update_dual_param()

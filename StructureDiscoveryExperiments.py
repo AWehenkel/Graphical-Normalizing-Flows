@@ -20,7 +20,7 @@ cond_types = {"DAG": DAGConditioner, "Coupling": CouplingConditioner, "Autoregre
 norm_types = {"Affine": AffineNormalizer, "Monotonic": MonotonicNormalizer}
 
 def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., nb_epoch=20000, pre_heating_epochs=10,
-              nb_flow=1, cond_type = "DAG", emb_net = [50, 50, 50, 30]):
+              nb_flow=3, cond_type = "DAG", emb_net = [150, 150, 150]):
     logger = utils.get_logger(logpath=os.path.join(folder, toy, 'logs'), filepath=os.path.abspath(__file__))
 
     logger.info("Creating model...")
@@ -30,23 +30,17 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     nb_samp = 100
     batch_size = 100
 
-    x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=10000)).to(device)
-    x_mu = x.mean(0)
-    x_std = x.std(0)
-
     x_test = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
-    x_test = (x_test - x_mu.unsqueeze(0).expand(x_test.shape[0], -1)) / x_std.unsqueeze(0).expand(x_test.shape[0], -1)
+    x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=1000)).to(device)
 
     dim = x.shape[1]
-    print(x_mu.shape)
 
-    norm_type = "Monotonic"
+    norm_type = "Affine"
     save_name = norm_type + str(emb_net) + str(nb_flow)
     solver = "CCParallel"
-    int_net = [100, 100, 100]
+    int_net = [150, 150, 150]
 
     conditioner_type = cond_types[cond_type]
-    print(dim)
     conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1]}
     if conditioner_type is DAGConditioner:
         conditioner_args['l1'] = l1
@@ -62,7 +56,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
     model = buildFCNormalizingFlow(nb_flow, conditioner_type, conditioner_args, normalizer_type, normalizer_args)
 
-    opt = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-5)
+    opt = torch.optim.Adam(model.parameters(), 1e-4, weight_decay=1e-5)
 
     if load:
         logger.info("Loading model...")
@@ -82,7 +76,6 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
         start = timer()
         for j in range(0, nb_samp, batch_size):
             cur_x = torch.tensor(toy_data.inf_train_gen(toy, batch_size=batch_size)).to(device)
-            cur_x = (cur_x - x_mu.unsqueeze(0).expand(batch_size, -1))/x_std.unsqueeze(0).expand(batch_size, -1)
             z, jac = model(cur_x)
             loss = model.loss(z, jac)
             loss_tot += loss.detach()
@@ -93,7 +86,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
                 print(ll.max(), z.max())
                 exit()
             opt.zero_grad()
-            loss.backward(retain_graph=False)
+            loss.backward(retain_graph=True)
             opt.step()
         model.step(epoch, loss_tot)
 
@@ -107,11 +100,56 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
                     format(epoch, loss_tot.item(), ll_test.item(), dagness, end-start))
 
 
+        if epoch % 100 == 0 and False:
+            with torch.no_grad():
+                stoch_gate = model.getDag().stoch_gate
+                noise_gate = model.getDag().noise_gate
+                s_thresh = model.getDag().s_thresh
+                model.getDag().stoch_gate = False
+                model.getDag().noise_gate = False
+                model.getDag().s_thresh = True
+                for threshold in [.95, .1, .01, .0001, 1e-8]:
+                    model.set_h_threshold(threshold)
+                    # Valid loop
+                    z, jac = model(x_test)
+                    ll = (model.z_log_density(z) + jac)
+                    ll_test = -ll.mean().item()
+                    dagness = max(model.DAGness()).item()
+                    logger.info("epoch: {:d} - Threshold: {:4f} - Valid log-likelihood: {:4f} - <<DAGness>>: {:4f}".
+                                format(epoch, threshold, ll_test, dagness))
+                model.getDag().stoch_gate = stoch_gate
+                model.getDag().noise_gate = noise_gate
+                model.getDag().s_thresh = s_thresh
+                model.set_h_threshold(0.)
 
-        if epoch % 100 == 0:
+
+        if epoch % 500 == 0:
+            font = {'family': 'normal',
+                    'weight': 'normal',
+                    'size': 25}
+
+            matplotlib.rc('font', **font)
+            if toy in ["2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians", "2gaussians",
+                       "4gaussians", "2igaussians", "8gaussians"] or True:
+                def compute_ll(x):
+                    z, jac = model(x)
+                    ll = (model.z_log_density(z) + jac)
+                    return ll, z
                 with torch.no_grad():
-                    plt.matshow(model.getConditioners()[0].A.detach().cpu().numpy())
-                    plt.colorbar()
+                    npts = 100
+                    plt.figure(figsize=(12, 12))
+                    gs = gridspec.GridSpec(2, 2, width_ratios=[3, 1], height_ratios=[3, 1])
+                    ax = plt.subplot(gs[0])
+                    qz_1, qz_2 = vf.plt_flow(compute_ll, ax, npts=npts, device=device)
+                    plt.subplot(gs[1])
+                    plt.plot(qz_1, np.linspace(-4, 4, npts))
+                    plt.ylabel('$x_2$', fontsize=25, rotation=-90, labelpad=20)
+
+                    plt.xticks([])
+                    plt.subplot(gs[2])
+                    plt.plot(np.linspace(-4, 4, npts), qz_2)
+                    plt.xlabel('$x_1$', fontsize=25)
+                    plt.yticks([])
                     plt.savefig("%s%s/flow_%s_%d.pdf" % (folder, toy, save_name, epoch))
                     torch.save(model.state_dict(), folder + toy + '/' + save_name + 'model.pt')
                     torch.save(opt.state_dict(), folder + toy + '/'+ save_name + 'ADAM.pt')
@@ -121,7 +159,7 @@ toy = "8gaussians"
 import argparse
 datasets = ["2igaussians", "2gaussians", "8gaussians", "swissroll", "moons", "pinwheel", "cos", "2spirals", "checkerboard", "line", "line-noisy",
             "circles", "joint_gaussian", "2spirals-8gaussians", "4-2spirals-8gaussians", "8-2spirals-8gaussians",
-            "8-MIX", "7-MIX", "4gaussians", "woodStructural"]
+            "8-MIX", "7-MIX", "4gaussians"]
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument("-dataset", default=None, choices=datasets, help="Which toy problem ?")

@@ -20,6 +20,7 @@ import torchvision.transforms as tforms
 import matplotlib.animation as animation
 import matplotlib
 import torchvision
+import pickle
 
 def add_noise(x):
     """
@@ -44,9 +45,9 @@ def compute_bits_per_dim(ll, x):
 
     return bits_per_dim
 
-def load_data(dataset="MNIST", batch_size=100, cuda=-1):
+def load_data(dataset="MNIST", batch_size=100, cuda=-1, dataset_root="."):
     if dataset == "MNIST":
-        data = datasets.MNIST('./MNIST', train=True, download=True,
+        data = datasets.MNIST(os.path.join(dataset_root, 'MNIST'), train=True, download=True,
                               transform=transforms.Compose([
                                   AddUniformNoise(),
                                   ToTensor()
@@ -54,7 +55,7 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
 
         train_data, valid_data = torch.utils.data.random_split(data, [50000, 10000])
 
-        test_data = datasets.MNIST('./MNIST', train=False, download=True,
+        test_data = datasets.MNIST(os.path.join(dataset_root, 'MNIST'), train=False, download=True,
                                    transform=transforms.Compose([
                                        AddUniformNoise(),
                                        ToTensor()
@@ -65,7 +66,7 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
         valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
         test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True, drop_last=True, **kwargs)
     elif len(dataset) == 6 and dataset[:5] == 'MNIST':
-        data = datasets.MNIST('./MNIST', train=True, download=True,
+        data = datasets.MNIST(os.path.join(dataset_root, 'MNIST'), train=True, download=True,
                               transform=transforms.Compose([
                                   AddUniformNoise(),
                                   ToTensor()
@@ -77,7 +78,7 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
 
         train_data, valid_data = torch.utils.data.random_split(data, [5000, idx.sum() - 5000])
 
-        test_data = datasets.MNIST('./MNIST', train=False, download=True,
+        test_data = datasets.MNIST(os.path.join(dataset_root, 'MNIST'), train=False, download=True,
                                    transform=transforms.Compose([
                                        AddUniformNoise(),
                                        ToTensor()
@@ -99,14 +100,14 @@ def load_data(dataset="MNIST", batch_size=100, cuda=-1):
         im_size = 32  # if args.imagesize is None else args.imagesize
         trans = lambda im_size: tforms.Compose([tforms.Resize(im_size), tforms.ToTensor(), add_noise])
         train_data = dset.CIFAR10(
-            root="./data", train=True, transform=tforms.Compose([
+            root=os.path.join(dataset_root, 'CIFAR10'), train=True, transform=tforms.Compose([
                 tforms.Resize(im_size),
                 tforms.RandomHorizontalFlip(),
                 tforms.ToTensor(),
                 add_noise,
             ]), download=True
         )
-        test_data = dset.CIFAR10(root="./data", train=False, transform=trans(im_size), download=True)
+        test_data = dset.CIFAR10(root=os.path.join(dataset_root, 'CIFAR10'), train=False, transform=trans(im_size), download=True)
         kwargs = {'num_workers': 0, 'pin_memory': True} if cuda > -1 else {}
 
         train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, drop_last=True, shuffle=True, **kwargs)
@@ -123,7 +124,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
           int_net=[50, 50, 50], all_args=None, file_number=None, train=True, solver="CC", weight_decay=1e-5,
           learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine', nb_flow=[1], hot_encoding=True,
           prior_A_kernel=None, conditioner="DAG", emb_net=None, load_A=False, A_dir=None, sub_DAG=False,
-          archi_type="Classic", outter_steps=1):
+          archi_type="Classic", outter_steps=1, dataset_root="."):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -267,6 +268,9 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
     # ----------------------- Main Loop ------------------------- #
     for epoch in range(nb_epoch):
+        if epoch == 300:
+            for param_group in opt.param_groups:
+                param_group['lr'] = .0001
         ll_tot = 0
         start = timer()
         if train:
@@ -472,17 +476,30 @@ parser.add_argument("-sub_DAG", default=False, action="store_true")
 parser.add_argument("-archi_type", default="UFlow", choices=["UFlow", "Classic", "IUFlow"])
 parser.add_argument("-outter_steps", default=1, type=int)
 
+parser.add_argument("-dataset_root", default=".", type=str)
+parser.add_argument("-load_args", default="", type=str)
+
 args = parser.parse_args()
+
+if args.load_args != "":
+    with open(os.path.join(args.load_args, "args.pkl"), "rb") as f:
+        args = pickle.load(f)
+
 from datetime import datetime
 now = datetime.now()
 
 path = args.dataset + "/" + now.strftime("%m_%d_%Y_%H_%M_%S") if args.folder == "" else args.folder
 if not (os.path.isdir(path)):
     os.makedirs(path)
+
+with open(os.path.join(path, "args.pkl"), "wb") as f:
+    pickle.dump(args, f)
+
 train(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_steps_dual, l1=args.l1, nb_epoch=args.nb_epoch,
       int_net=args.int_net, b_size=args.b_size, all_args=args, nb_flow=args.nb_flow,
       nb_steps=args.nb_steps, file_number=args.f_number, norm_type=args.normalizer,
       solver=args.solver, train=not args.test, weight_decay=args.weight_decay, learning_rate=args.learning_rate,
       batch_per_optim_step=args.batch_per_optim_step, n_gpu=args.nb_gpus, hot_encoding=not args.no_hot_encoding,
       prior_A_kernel=args.prior_A_kernel, conditioner=args.conditioner, emb_net=args.emb_net, load_A=args.load_A,
-      A_dir=args.A_dir, sub_DAG=args.sub_DAG, archi_type=args.archi_type, outter_steps=args.outter_steps)
+      A_dir=args.A_dir, sub_DAG=args.sub_DAG, archi_type=args.archi_type, outter_steps=args.outter_steps,
+      dataset_root=args.dataset_root)
