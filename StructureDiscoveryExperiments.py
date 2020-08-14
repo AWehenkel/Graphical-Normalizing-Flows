@@ -150,11 +150,11 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
         if epoch % 50 == 0:
                 with torch.no_grad():
-                    plt.subplot(1, 2, 1)
-                    plt.matshow(model.getConditioners()[0].A.detach().cpu().numpy())
-                    plt.colorbar()
+                    fig, axes = plt.subplots(nrows=1, ncols=2)
+                    pos = axes[0, 0].matshow(model.getConditioners()[0].A.detach().cpu().numpy())
+                    fig.colorbar(pos, ax=axes[0, 0])
                     plt.subplot(1, 2, 2)
-                    plt.matshow(ground_truth_A.numpy())
+                    axes[0, 0].matshow(ground_truth_A.numpy())
                     plt.savefig("%s%s/flow_%s_%d.pdf" % (folder, toy, save_name, epoch))
                     torch.save(model.state_dict(), folder + toy + '/' + save_name + 'model.pt')
                     torch.save(opt.state_dict(), folder + toy + '/'+ save_name + 'ADAM.pt')
