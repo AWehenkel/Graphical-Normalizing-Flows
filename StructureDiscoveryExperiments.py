@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import math
 import seaborn as sns
-import UCIdatasets.proteins as proteins
+import UCIdatasets
 sns.set()
 flatui = ["#9b59b6", "#3498db", "#95a5a6", "#e74c3c", "#34495e", "#2ecc71"]
 sns.palplot(sns.color_palette(flatui))
@@ -48,7 +48,7 @@ def getDataset(ds_name="8-MIX", device="cpu"):
 
         ground_truth_A = toy_data.getA(ds_name)
     elif ds_name == "proteins":
-        data = proteins.PROTEINS()
+        data = UCIdatasets.PROTEINS()
         x_train = torch.from_numpy(data.trn.x).to(device)
         x_test = torch.from_numpy(data.val.x).to(device)
         x_valid = torch.from_numpy(data.tst.x).to(device)
@@ -78,7 +78,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     (x_train, x_test, x_valid), ground_truth_A = getDataset(toy, device)
     dim = x_train.shape[1]
 
-    norm_type = "Monotonic"
+    norm_type = "Affine"
     save_name = norm_type + str(emb_net) + str(nb_flow)
     solver = "CCParallel"
     int_net = [100, 100, 100, 100]
@@ -148,12 +148,12 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
 
 
-        if epoch % 1000 == 0:
+        if epoch % 50 == 0:
                 with torch.no_grad():
                     plt.subplot(1, 2, 1)
                     plt.matshow(model.getConditioners()[0].A.detach().cpu().numpy())
                     plt.colorbar()
-                    plt.subplot(1, 2, 1)
+                    plt.subplot(1, 2, 2)
                     plt.matshow(ground_truth_A.numpy())
                     plt.savefig("%s%s/flow_%s_%d.pdf" % (folder, toy, save_name, epoch))
                     torch.save(model.state_dict(), folder + toy + '/' + save_name + 'model.pt')

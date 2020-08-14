@@ -246,7 +246,7 @@ def getA(toy):
         for i in range(7):
             A[i * 2, 2 * i + 1] = 1
     elif toy == "woodStructural":
-        A = torch.zeros(14, 14)
+        A = torch.zeros(8, 8)
         A[2, 0] = 1
         A[2, 1] = 1
         A[3, 0] = 1
