@@ -239,8 +239,8 @@ class DAGConditioner(Conditioner):
                     self.dag_const = torch.tensor(1.)
                 else:
                     print(self.dag_const.device)
-                    self.dag_const = torch.tensor(0.)
-                    self.l1_weight = torch.tensor(0.)
+                    self.dag_const = torch.tensor(0., device=self.A.device)
+                    self.l1_weight = torch.tensor(0., device=self.A.device)
                     print(self.dag_const.device)
                     print("Post processing successful.")
                     print("Number of edges is %d VS number max is %d" %
