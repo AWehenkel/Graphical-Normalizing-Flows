@@ -236,4 +236,28 @@ def inf_train_gen(data, rng=None, batch_size=200):
         return inf_train_gen("8gaussians", rng, batch_size)
 
 
+def getA(toy):
+    if toy == "8-MIX":
+        A = torch.zeros(16, 16)
+        for i in range(8):
+            A[i * 2, 2*i+1] = 1
+    elif toy == "7-MIX":
+        A = torch.zeros(14, 14)
+        for i in range(7):
+            A[i * 2, 2 * i + 1] = 1
+    elif toy == "woodStructural":
+        A = torch.zeros(14, 14)
+        A[2, 0] = 1
+        A[2, 1] = 1
+        A[3, 0] = 1
+        A[3, 1] = 1
+        A[5, 3] = 1
+        A[5, 4] = 1
+        A[6, 3] = 1
+        A[7, 5] = 1
+    else:
+        return None
+    return A
+
+
 
