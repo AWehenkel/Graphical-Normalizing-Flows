@@ -142,6 +142,7 @@ class FCNormalizingFlow(NormalizingFlow):
 
     def loss(self, z, jac):
         log_p_x = jac + self.z_log_density(z)
+        print(self.constraintsLoss().device, log_p_x.mean().device)
         return self.constraintsLoss() - log_p_x.mean()
 
     def getNormalizers(self):
