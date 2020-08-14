@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import math
 import seaborn as sns
-import UCIdatasets
+import UCIdatasets.proteins as proteins
 sns.set()
 flatui = ["#9b59b6", "#3498db", "#95a5a6", "#e74c3c", "#34495e", "#2ecc71"]
 sns.palplot(sns.color_palette(flatui))
@@ -48,7 +48,7 @@ def getDataset(ds_name="8-MIX", device="cpu"):
 
         ground_truth_A = toy_data.getA(ds_name)
     elif ds_name == "proteins":
-        data = UCIdatasets.PROTEINS()
+        data = proteins.PROTEINS()
         x_train = torch.from_numpy(data.trn.x).to(device)
         x_test = torch.from_numpy(data.val.x).to(device)
         x_valid = torch.from_numpy(data.tst.x).to(device)
