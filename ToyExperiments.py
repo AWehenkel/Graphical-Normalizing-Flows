@@ -93,7 +93,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
                 print(ll.max(), z.max())
                 exit()
             opt.zero_grad()
-            loss.backward(retain_graph=False)
+            loss.backward(retain_graph=True)
             opt.step()
         model.step(epoch, loss_tot)
 
