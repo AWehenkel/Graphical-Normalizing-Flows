@@ -238,6 +238,7 @@ class DAGConditioner(Conditioner):
                     self.lambd = self.lambd + self.c * lag_const
                     self.dag_const = torch.tensor(1.)
                 else:
+                    print(self.dag_const.device)
                     self.dag_const = torch.tensor(0.)
                     self.l1_weight = torch.tensor(0.)
                     print(self.dag_const.device)
