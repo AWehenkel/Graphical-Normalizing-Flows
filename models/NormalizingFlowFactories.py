@@ -6,6 +6,7 @@ from .NormalizingFlow import NormalizingFlowStep, FCNormalizingFlow, CNNormalizi
 from math import pi
 from .MLP import MNISTCNN, CIFAR10CNN, MLP, SubMNISTCNN
 from .UFlow import UFlow, ImprovedUFlow
+import torch.distributions as D
 
 
 class NormalLogDensity(nn.Module):
@@ -15,6 +16,22 @@ class NormalLogDensity(nn.Module):
 
     def forward(self, z):
         return -.5 * (torch.log(self.pi * 2) + z ** 2).sum(1)
+
+
+class MixtureLogDensity(nn.Module):
+    def __init__(self, n_mode=10):
+        super(MixtureLogDensity, self).__init__()
+        self.register_buffer("pi", torch.tensor(pi))
+        self.register_buffer("mu", torch.arange(-3., 3.0001, 6. / float(n_mode - 1)))
+        self.register_buffer("sigma", torch.ones(n_mode, ) * 1.5 / float(n_mode))
+        self.register_buffer("mix_weights", torch.ones(n_mode, ))
+
+    def forward(self, z):
+        mix = D.Categorical(self.mix_weights)
+        comp = D.Normal(self.mu, self.sigma)
+        dist = D.MixtureSameFamily(mix, comp)
+        return dist.log_prob(z).sum(1)
+
 
 
 def buildFCNormalizingFlow(nb_steps, conditioner_type, conditioner_args, normalizer_type, normalizer_args):
@@ -183,7 +200,7 @@ def buildSubMNISTNormalizingFlow(nb_inner_steps, normalizer_type, normalizer_arg
         for step in range(nb_inner_steps[0]):
             emb_s = 2 if normalizer_type is AffineNormalizer else 30
             # TODO ADD pixel position
-            in_s = (prior_kernel * 2 + 1) ** 2 - 1
+            in_s = (prior_kernel * 2 + 1) ** 2 - 1 + 2
             hidden = MLP(in_d=in_s, hidden=[in_s * 4, in_s * 4], out_d=emb_s)
 
             #hidden = SubMNISTCNN(fc_l=[16, 50], size_img=[1, 5, 5], out_d=emb_s)

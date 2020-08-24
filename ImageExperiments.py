@@ -45,6 +45,7 @@ def compute_bits_per_dim(ll, x):
 
     return bits_per_dim
 
+
 def load_data(dataset="MNIST", batch_size=100, cuda=-1, dataset_root="."):
     if dataset == "MNIST":
         data = datasets.MNIST(os.path.join(dataset_root, 'MNIST'), train=True, download=True,
@@ -124,7 +125,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
           int_net=[50, 50, 50], all_args=None, file_number=None, train=True, solver="CC", weight_decay=1e-5,
           learning_rate=1e-3, batch_per_optim_step=1, n_gpu=1, norm_type='Affine', nb_flow=[1], hot_encoding=True,
           prior_A_kernel=None, conditioner="DAG", emb_net=None, load_A=False, A_dir=None, sub_DAG=False,
-          archi_type="Classic", outter_steps=1, dataset_root="."):
+          archi_type="Classic", outter_steps=1, dataset_root=".", latent_dist="Normal"):
     logger = utils.get_logger(logpath=os.path.join(path, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(str(all_args))
 
@@ -210,6 +211,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
     x_std = (x_mean2 / (batch_idx + 1) - x_mean ** 2) ** .5
 
     #inner_model = FCNormalizingFlow([FixedScalingStep(x_mean, x_std), inner_model], NormalLogDensity())
+    latent_dist = {"Normal": NormalLogDensity(), "Mixture5": MixtureLogDensity(5), "Mixture10": MixtureLogDensity(10)}[latent_dist]
+    inner_model = FCNormalizingFlow([inner_model], latent_dist)
 
     model = nn.DataParallel(inner_model, device_ids=list(range(n_gpu))).to(master_device)
     logger.info(str(model))
@@ -233,9 +236,10 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
 
     if load:
         for conditioner in model.module.getConditioners():
-            conditioner.alpha = conditioner.getAlpha()
+            if issubclass(type(conditioner), DAGConditioner):
+                conditioner.alpha = conditioner.getAlpha()
 
-    if False:
+    if True:
         if load:
             with torch.no_grad():
                 for conditioner in model.module.getConditioners():
@@ -244,6 +248,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                         plt.matshow(conditioner.A.detach().numpy())
                         plt.savefig(path + "/test.pdf")
                         conditioner.post_process()
+                for i in range(100):
+                    model.module.step(i, torch.tensor(10.))
         with torch.no_grad():
             n_images = 20
             x = list(train_loader)[0][0].view(batch_size, -1)[:n_images, :]
@@ -255,15 +261,15 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             torchvision.utils.save_image(grid_img, path + '/images_real.png')
             grid_img = torchvision.utils.make_grid(logit_back(x_recon.view(n_images, 1, 28, 28), alpha), nrow=4)
             torchvision.utils.save_image(grid_img, path + '/images_recon.png')
-            for i in range(15):
+            for i in range(10):
                 n_images = 20
-                z = torch.randn(n_images, 784) * 0.1 * i
+                z = torch.randn(n_images, 784) * 0.1 * (i + 5)
                 x = model.module.invert(z)
                 print(torch.norm(model(x)[0] - z))
                 grid_img = torchvision.utils.make_grid(logit_back(x.view(n_images, 1, 28, 28), alpha), nrow=4)
                 torchvision.utils.save_image(grid_img, path + '/images%d.png' % i)
         #plt.show()
-        #exit()
+        exit()
 
 
     # ----------------------- Main Loop ------------------------- #
@@ -425,7 +431,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
                     for T in [.1, .25, .5, .75, 1.]:
                         z = torch.randn(n_images, in_s).to(device=master_device) * T
                         x = model.module.invert(z)
-                        print((z - model(x)[0]).abs().mean())
+                        print((z - model(x)[0]).abs().mean(), flush=True)
                         grid_img = torchvision.utils.make_grid(logit_back(x.view(n_images, 1, 28, 28), alpha), nrow=4)
                         torchvision.utils.save_image(grid_img, path + '/images_%d_%f.png' % (epoch, T))
 
@@ -438,7 +444,8 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             torch.save(opt.state_dict(), path + '/ADAM.pt')
             if model.module.isInvertible():
                 for i, cond in enumerate(model.module.getConditioners()):
-                    torch.save(cond.A.detach().cpu(), path + '/A%d.pt' % i)
+                    if issubclass(type(cond), DAGConditioner):
+                        torch.save(cond.A.detach().cpu(), path + '/A%d.pt' % i)
             torch.cuda.empty_cache()
 
 import argparse
@@ -479,11 +486,19 @@ parser.add_argument("-outter_steps", default=1, type=int)
 parser.add_argument("-dataset_root", default=".", type=str)
 parser.add_argument("-load_args", default="", type=str)
 
+parser.add_argument("-latent_dist", default="Normal", choices=["Normal", "Mixture5", "Mixture10"])
+
 args = parser.parse_args()
 
 if args.load_args != "":
     with open(os.path.join(args.load_args, "args.pkl"), "rb") as f:
+        folder = args.folder
+        load = args.load
+        f_number = args.f_number
         args = pickle.load(f)
+        args.folder = folder
+        args.load = load
+        args.f_number = f_number
 
 from datetime import datetime
 now = datetime.now()
@@ -502,4 +517,4 @@ train(dataset=args.dataset, load=args.load, path=path, nb_step_dual=args.nb_step
       batch_per_optim_step=args.batch_per_optim_step, n_gpu=args.nb_gpus, hot_encoding=not args.no_hot_encoding,
       prior_A_kernel=args.prior_A_kernel, conditioner=args.conditioner, emb_net=args.emb_net, load_A=args.load_A,
       A_dir=args.A_dir, sub_DAG=args.sub_DAG, archi_type=args.archi_type, outter_steps=args.outter_steps,
-      dataset_root=args.dataset_root)
+      dataset_root=args.dataset_root, latent_dist=args.latent_dist)

@@ -30,6 +30,12 @@ def inf_train_gen(data, rng=None, batch_size=200):
         data2 = inf_train_gen("4-2spirals-8gaussians", rng=rng, batch_size=batch_size)
         return np.concatenate([data1, data2], axis=1)
 
+    if data == "3-MIX_DEP":
+        data1 = inf_train_gen("2spirals", rng=rng, batch_size=batch_size)
+        data2 = inf_train_gen("8gaussians", rng=rng, batch_size=batch_size)
+        data3 = (data1 + data2)/2.
+        return np.concatenate([data1, data2, data3], axis=1)
+
     if data == "8-MIX":
         data1 = inf_train_gen("2spirals", rng=rng, batch_size=batch_size)
         data2 = inf_train_gen("8gaussians", rng=rng, batch_size=batch_size)
@@ -245,6 +251,15 @@ def getA(toy):
         A = torch.zeros(14, 14)
         for i in range(7):
             A[i * 2, 2 * i + 1] = 1
+
+    elif toy == "3-MIX_DEP":
+        A = torch.zeros(6, 6)
+        for i in range(3):
+            A[i * 2, 2 * i + 1] = 1
+        A[4, 0] = 1
+        A[4, 3] = 1
+        A[5, 1] = 1
+        A[5, 4] = 1
     elif toy == "woodStructural":
         A = torch.zeros(8, 8)
         A[2, 0] = 1

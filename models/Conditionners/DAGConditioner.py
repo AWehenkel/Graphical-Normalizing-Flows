@@ -120,6 +120,7 @@ class DAGConditioner(Conditioner):
         return importance*(x + noise)
 
     def soft_thresholded_A(self):
+        #return torch.clamp_max(2*(torch.sigmoid(2*(self.A**2)) -.5) + .25, 0.9999)
         return 2*(torch.sigmoid(2*(self.A**2)) -.5)
 
     def hard_thresholded_A(self):
@@ -206,7 +207,10 @@ class DAGConditioner(Conditioner):
             lag_const = self.get_power_trace()
             while self.dag_const > 0. and lag_const < self.tol and self.exponent < self.in_size:
                 print("Update exponent", self.exponent)
-                self.exponent += 50
+                if self.in_size > 50:
+                    self.exponent += 50
+                else:
+                    self.exponent = self.in_size
                 lag_const = self.get_power_trace()
 
             if self.dag_const > 0. and lag_const > self.tol:
