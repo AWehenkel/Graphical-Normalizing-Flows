@@ -33,9 +33,10 @@ def inf_train_gen(data, rng=None, batch_size=200):
     if data == "3-MIX_DEP":
         data1 = inf_train_gen("2spirals", rng=rng, batch_size=batch_size)
         data2 = inf_train_gen("8gaussians", rng=rng, batch_size=batch_size)
-        p = rng.randint(0, 1, batch_size)
+        p = rng.randint(0, 2, batch_size).reshape(-1, 1)
+        p = np.concatenate([p, p], axis=1)
         data3 = (data1 * p + data2 * (1-p))
-        return np.concatenate([data1, data2, data3], axis=1)
+        return np.concatenate([data1, data2, data3], axis=1).astype(data2.dtype)
 
     if data == "8-MIX":
         data1 = inf_train_gen("2spirals", rng=rng, batch_size=batch_size)

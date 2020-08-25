@@ -91,7 +91,7 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
     norm_type = norm_type
     save_name = norm_type + str(emb_net) + str(nb_flow) + str(use_A)
     solver = "CCParallel"
-    int_net = [100, 100, 100, 100]
+    int_net = [50, 50, 50]
 
     conditioner_type = cond_types[cond_type]
     conditioner_args = {"in_size": dim, "hidden": emb_net[:-1], "out_size": emb_net[-1]}
@@ -188,9 +188,9 @@ def train_toy(toy, load=True, nb_step_dual=300, nb_steps=15, folder="", l1=1., n
 
                         def plot_dens_2D(i):
                             def sample(x):
-                                n_pts = 5
+                                n_pts = 3
                                 p_x = 0.
-                                for j in range(100):
+                                for j in range(500):
                                     x_all = x_valid[j*n_pts:(j + 1)*n_pts].unsqueeze(0).expand(x.shape[0], -1, -1).clone().to(device)
                                     x_all[:, :,[2*i, 2*i + 1]] = x.unsqueeze(1).expand(-1, n_pts, -1).to(device)
                                     z, jac = model(x_all.view(-1, 6))
@@ -219,6 +219,7 @@ parser.add_argument("-l1", default=.0, type=float, help="Maximum weight for l1 r
 parser.add_argument("-nb_epoch", default=20000, type=int, help="Number of epochs")
 parser.add_argument("-norm_type", default="Affine")
 parser.add_argument("-use_A", default=False, action="store_true")
+parser.add_argument("-emb_net", default=[100, 100, 100, 10], nargs="+", type=int, help="NN layers of embedding")
 
 args = parser.parse_args()
 
@@ -232,4 +233,4 @@ for toy in toys:
     if not(os.path.isdir(args.folder + toy)):
         os.makedirs(args.folder + toy)
     train_toy(toy, load=args.load, folder=args.folder, nb_step_dual=args.nb_steps_dual, l1=args.l1,
-              nb_epoch=args.nb_epoch, norm_type=args.norm_type, use_A=args.use_A)
+              nb_epoch=args.nb_epoch, norm_type=args.norm_type, use_A=args.use_A, emb_net=args.emb_net)

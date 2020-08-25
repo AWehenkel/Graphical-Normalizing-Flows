@@ -239,7 +239,7 @@ def train(dataset="MNIST", load=True, nb_step_dual=100, nb_steps=20, path="", l1
             if issubclass(type(conditioner), DAGConditioner):
                 conditioner.alpha = conditioner.getAlpha()
 
-    if True:
+    if False:
         if load:
             with torch.no_grad():
                 for conditioner in model.module.getConditioners():
