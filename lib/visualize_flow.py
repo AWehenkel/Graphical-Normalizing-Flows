@@ -6,8 +6,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import torch
 
-LOW = -4.5
-HIGH = 4.5
+LOW = -3
+HIGH = 3
 
 font = {'family' : 'normal',
         'weight' : 'normal',
@@ -50,14 +50,14 @@ def plt_flow(transform, ax, npts=50, title="$q(x)$", device="cpu"):
 
     #xx = z[:, 0].cpu().numpy().reshape(npts, npts)
     #yy = z[:, 1].cpu().numpy().reshape(npts, npts)
-    qz = np.exp(logqx.cpu().numpy()).reshape(npts, npts)
+    qz = logqx.cpu().numpy().reshape(npts, npts)
     qz_1 = qz.sum(1)
     qz_2 = qz.sum(0)
 
-    pcol = plt.pcolormesh(xx, yy, qz, linewidth=0, rasterized=True, cmap="BuPu")
+    pcol = ax.pcolormesh(xx, yy, qz, shading='auto', vmin=qz.min(), vmax=qz.max())
     pcol.set_edgecolor('face')
-    ax.set_xlim(-4.5, 4.5)
-    ax.set_ylim(-4.5, 4.5)
+    ax.set_xlim(LOW, HIGH)
+    ax.set_ylim(LOW, HIGH)
     cmap = matplotlib.cm.get_cmap(None)
     ax.set_facecolor(cmap(0.))
     #ax.invert_yaxis()
@@ -108,7 +108,7 @@ def plt_flow_density(prior_logdensity, inverse_transform, ax, npts=100, memory=1
     ax.set_title(title)
 
 
-def plt_flow_samples(prior_sample, transform, ax, npts=200, memory=100, title="$x ~ q(x)$", device="cpu"):
+def plt_flow_samples(prior_sample, transform, ax, npts=200, memory=100, title="$x \sim q(x)$", device="cpu"):
     z = prior_sample(npts * npts, 2).type(torch.float32).to(device)
     zk = []
     inds = torch.arange(0, z.shape[0]).to(torch.int64)
@@ -117,16 +117,18 @@ def plt_flow_samples(prior_sample, transform, ax, npts=200, memory=100, title="$
     zk = torch.cat(zk, 0).cpu().numpy()
     ax.hist2d(zk[:, 0], zk[:, 1], range=[[LOW, HIGH], [LOW, HIGH]], bins=npts)
     #ax.invert_yaxis()
-    ax.get_xaxis().set_ticks([2, 0, 2])
-    ax.get_yaxis().set_ticks([2, 0, 2])
+    ax.get_xaxis().set_ticks(np.arange(LOW, HIGH + .1, (HIGH - LOW)/4))
+    ax.get_yaxis().set_ticks(np.arange(LOW, HIGH + .1, (HIGH - LOW)/4))
     ax.set_title(title)
 
 
 def plt_samples(samples, ax, npts=200, title="$x \sim p(x)$"):
+    #print(samples.min(0), samples.max(0), samples.mean(0))
     ax.hist2d(samples[:, 0], samples[:, 1], range=[[LOW, HIGH], [LOW, HIGH]], bins=npts)
-    ax.invert_yaxis()
     ax.get_xaxis().set_ticks([])
     ax.get_yaxis().set_ticks([])
+    ax.get_xaxis().set_ticks(np.arange(LOW, HIGH + .1, (HIGH - LOW)/4))
+    ax.get_yaxis().set_ticks(np.arange(LOW, HIGH + .1, (HIGH - LOW)/4))
     ax.set_title(title)
 
 

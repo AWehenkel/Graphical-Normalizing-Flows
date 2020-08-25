@@ -10,7 +10,7 @@ import os
 # Dataset iterator
 def inf_train_gen(data, rng=None, batch_size=200):
     if rng is None:
-        rng = np.random.RandomState()
+        rng = np.random.RandomState(42)
         #print(rng)
 
     if data == "2spirals-8gaussians":
@@ -33,7 +33,8 @@ def inf_train_gen(data, rng=None, batch_size=200):
     if data == "3-MIX_DEP":
         data1 = inf_train_gen("2spirals", rng=rng, batch_size=batch_size)
         data2 = inf_train_gen("8gaussians", rng=rng, batch_size=batch_size)
-        data3 = (data1 + data2)/2.
+        p = rng.randint(0, 1, batch_size)
+        data3 = (data1 * p + data2 * (1-p))
         return np.concatenate([data1, data2, data3], axis=1)
 
     if data == "8-MIX":
@@ -257,9 +258,9 @@ def getA(toy):
         for i in range(3):
             A[i * 2, 2 * i + 1] = 1
         A[4, 0] = 1
-        A[4, 3] = 1
+        A[4, 2] = 1
         A[5, 1] = 1
-        A[5, 4] = 1
+        A[5, 3] = 1
     elif toy == "woodStructural":
         A = torch.zeros(8, 8)
         A[2, 0] = 1
