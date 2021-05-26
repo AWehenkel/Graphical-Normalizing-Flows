@@ -8,8 +8,8 @@ The list of dependencies can be found in requirements.txt text file and installe
 pip install -r requirements.txt
 ```
 # Code architecture
-This repository provides code to build diverse normalizing flow models in PyTorch. The core components are located in **models** folder. The different flow models are described in the file **NormalizingFlow.py** and all follows the structure of the parent **class NormalizingFlow**.
-A flow step is usually designed as a combination of a **normalizer** (such as the ones described in Normalizers sub-folder) with a **conditioner** (such as described in Conditioners sub-folder). Following the code hierarchy provided makes the implementation of new conditioners, normalizers or even complete flow architecture very easy.
+This repository provides some code to build diverse types normalizing flow models in PyTorch. The core components are located in the **models** folder. The different flow models are described in the file **NormalizingFlow.py** and they all follow the structure of the parent **class NormalizingFlow**.
+A flow step is usually designed as a combination of a **normalizer** (such as the ones described in Normalizers sub-folder) with a **conditioner** (such as the ones described in Conditioners sub-folder). Following the code hierarchy provided makes the implementation of new conditioners, normalizers or even complete flow architecture very easy.
 # Paper's experiments
 ## UCI Datasets
 You first have to download the datasets with the following command:
