@@ -155,10 +155,16 @@ class DAGConditioner(Conditioner):
         if self.hot_encoding:
             hot_encoding = torch.eye(self.in_size, device=self.A.device).unsqueeze(0).expand(x.shape[0], -1, -1)\
                 .contiguous().view(-1, self.in_size)
-            e = self.embedding_net(e)
-            full_e = torch.cat((e, hot_encoding), 1).view(x.shape[0], self.in_size, -1)
-            # TODO Add context
-            return full_e
+            # ORIGINAL CODE
+            # e = self.embedding_net(e)
+            # full_e = torch.cat((e, hot_encoding), 1).view(x.shape[0], self.in_size, -1)
+            # # TODO Add context
+            # return full_e
+            # END ORIGINAL CODE
+
+            # ASIC'S ATTEMPT TO FIX DAG CONDITIONER ERROR
+            return self.embedding_net(torch.cat((e, hot_encoding), 1)).view(x.shape[0], self.in_size, -1)
+            # END ASIC'S ATTEMPT
 
         return self.embedding_net(e).view(x.shape[0], self.in_size, -1)#.permute(0, 2, 1).contiguous().view(x.shape[0], -1)
 

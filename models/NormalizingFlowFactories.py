@@ -17,6 +17,12 @@ class NormalLogDensity(nn.Module):
 
 
 def buildFCNormalizingFlow(nb_steps, conditioner_type, conditioner_args, normalizer_type, normalizer_args):
+    """
+    Function that returns a normalizing flow used in UCI experiments
+
+    @param nb_steps: number of normalizing flow steps
+
+    """
     flow_steps = []
     for step in range(nb_steps):
         conditioner = conditioner_type(**conditioner_args)
